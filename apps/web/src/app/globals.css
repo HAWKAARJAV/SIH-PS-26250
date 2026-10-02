@@ -1,0 +1,48 @@
+@import "tailwindcss";
+@import "@fontsource-variable/fraunces";
+@import "@fontsource/noto-sans-devanagari/400.css";
+@import "@fontsource/noto-sans-devanagari/600.css";
+
+@theme {
+  --color-canvas: #faf6ef;
+  --color-surface: #fffdf9;
+  --color-surface-2: #f4eee3;
+  --color-line: #e6ddce;
+  --color-line-strong: #d5c9b6;
+  --color-ink: #2a2118;
+  --color-ink-2: #51463a;
+  --color-ink-3: #6f6352;
+  --color-ember: #b9461b;
+  --color-ember-hover: #9c3913;
+  --color-ember-tint: #f8e4d8;
+  --color-vyom: #365c87;
+  --color-vyom-tint: #e3ecf5;
+  --color-moss: #3e7a4b;
+  --color-moss-tint: #e3f0e4;
+  --color-amber: #d9921a;
+  --color-amber-text: #7a4a00;
+  --color-amber-tint: #fbefd5;
+  --color-brick: #a92d1b;
+  --color-brick-tint: #f7deda;
+  --color-plum: #7a4b72;
+  --color-teal: #2e6f73;
+  --color-clay: #a8745a;
+  --font-display: "Fraunces Variable", "Fraunces", serif;
+  --font-sans: "Geist", "Noto Sans Devanagari", sans-serif;
+  --font-mono: "Geist Mono", ui-monospace, monospace;
+  --shadow-1: 0 1px 0 rgba(42, 33, 24, 0.04), 0 1px 2px rgba(42, 33, 24, 0.06);
+  --shadow-2: 0 2px 4px rgba(42, 33, 24, 0.05), 0 12px 28px -8px rgba(42, 33, 24, 0.12);
+  --radius-card: 12px;
+  --radius-panel: 16px;
+}
+
+:root { color-scheme: light; }
+html, body { background: var(--color-canvas); color: var(--color-ink); }
+body { font-family: var(--font-sans); font-size: 16px; line-height: 24px; }
+.font-display { font-family: var(--font-display); }
+.font-mono, .tabular { font-variant-numeric: tabular-nums lining-nums; }
+.font-mono { font-family: var(--font-mono); font-size: 12.5px; line-height: 18px; }
+:focus-visible { outline: 2px solid var(--color-ember); outline-offset: 2px; }
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; }
+}

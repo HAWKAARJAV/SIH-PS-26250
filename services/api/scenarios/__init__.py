@@ -1,0 +1,1 @@
+"""Deterministic MERIDIAN theatre generator."""

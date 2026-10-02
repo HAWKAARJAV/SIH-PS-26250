@@ -1,26 +1,15 @@
-# Dependencies and environments
-node_modules/
-.venv/
-.pnpm-store/
-
-# Python
-__pycache__/
-*.py[oc]
-.pytest_cache/
-.mypy_cache/
-.ruff_cache/
-*.egg-info/
-
-# Build output
-dist/
-build/
-.next/
-coverage/
-
-# Secrets and local config
+node_modules
+.next
+dist
+*.tsbuildinfo
+.venv
+__pycache__
+.pytest_cache
+.mypy_cache
+.ruff_cache
+*.pyc
 .env
-.env.*
-!.env.example
-
-# OS
+services/api/data
+playwright-report
+test-results
 .DS_Store
