@@ -1,0 +1,30 @@
+{
+  "name": "vyuha",
+  "private": true,
+  "version": "0.1.0",
+  "description": "VYUHA — dynamic air operations planning and resource optimisation. Synthetic prototype.",
+  "scripts": {
+    "dev": "concurrently -n web,api -c ember,vyom \"pnpm dev:web\" \"pnpm dev:api\"",
+    "dev:web": "pnpm --filter @vyuha/web dev",
+    "dev:api": "uv run --directory services/api uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload",
+    "build": "pnpm --filter @vyuha/web build",
+    "lint": "pnpm --filter @vyuha/web lint && uv run --directory services/api ruff check .",
+    "typecheck": "pnpm --filter @vyuha/web typecheck && uv run --directory services/api mypy app optimiser fusion analytics scenarios",
+    "test": "pnpm --filter @vyuha/web test && uv run --directory services/api pytest",
+    "seed": "uv run --directory services/api python -m scenarios.cli seed",
+    "demo": "pnpm seed && pnpm dev",
+    "benchmark": "uv run --directory services/api python -m analytics.benchmark",
+    "screenshots": "pnpm --filter @vyuha/web screenshots",
+    "contracts": "uv run --directory services/api python -m app.export_openapi && pnpm --filter @vyuha/contracts generate",
+    "check:offline": "node scripts/check-offline.mjs",
+    "format": "pnpm --filter @vyuha/web format && uv run --directory services/api ruff format ."
+  },
+  "devDependencies": {
+    "concurrently": "10.0.5"
+  },
+  "engines": {
+    "node": ">=20.9.0",
+    "pnpm": ">=10"
+  },
+  "packageManager": "pnpm@10.15.1"
+}

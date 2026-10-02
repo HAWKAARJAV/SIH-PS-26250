@@ -1,0 +1,58 @@
+[project]
+name = "vyuha-api"
+version = "0.1.0"
+description = "VYUHA planning API. Synthetic unclassified prototype. Not for operational use."
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "alembic>=1.20.0",
+    "argon2-cffi>=25.1.0",
+    "fastapi>=0.142.2",
+    "httpx>=0.28.1",
+    "lightgbm>=4.7.0",
+    "numpy>=2.5.3",
+    "orjson>=3.12.0",
+    "ortools>=9.15.6755",
+    "pydantic>=2.13.5",
+    "pydantic-settings>=2.15.0",
+    "pyjwt>=2.15.1",
+    "pyotp>=2.10.0",
+    "python-multipart>=0.0.32",
+    "rapidfuzz>=3.14.6",
+    "reportlab>=5.0.1",
+    "scikit-learn>=1.9.1",
+    "scipy>=1.18.1",
+    "shap>=0.52.0",
+    "slowapi>=0.1.10",
+    "sqlalchemy>=2.1.2",
+    "structlog>=26.1.0",
+    "uvicorn[standard]>=0.54.0",
+]
+
+[dependency-groups]
+dev = []
+
+[tool.uv]
+package = false
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+src = ["app", "optimiser", "fusion", "analytics", "scenarios", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+packages = ["app", "optimiser", "fusion", "analytics", "scenarios"]
+plugins = []
+
+[[tool.mypy.overrides]]
+module = ["ortools.*", "shap.*", "lightgbm.*", "sklearn.*"]
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+filterwarnings = ["ignore::DeprecationWarning"]
