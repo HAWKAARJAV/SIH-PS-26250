@@ -10,6 +10,7 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, Header, HTTPException
 from fusion import apply_feed_policy
+from fusion.conflicts import conflicts as list_conflicts
 from optimiser.explain import why_not
 from optimiser.plan import build_plan
 from optimiser.retask import apply_event, courses_of_action, impact
@@ -17,9 +18,10 @@ from optimiser.timeutil import parse_iso, to_dtg
 from optimiser.validator import validate
 from pydantic import BaseModel
 from scenarios.generate import generate_world
-from sqlalchemy import select
+from sqlalchemy import delete, select
 
 from app.auditlog import append_audit, verify_chain
+from app.clocking import tick
 from app.deps import Db, UserDep, need
 from app.rbac import MASKED_ROLES
 from app.tables import (
@@ -201,6 +203,7 @@ def get_clock(user: UserDep, db: Db) -> dict[str, Any]:
     sim = db.get(SimState, 1)
     if sim is None:
         raise HTTPException(status_code=409, detail="No scenario is loaded.")
+    tick(sim, db)
     return {
         "pack": sim.pack, "seed": sim.seed, "scale": sim.scale, "epoch": sim.epoch, "sim_now": sim.sim_now,
         "status": sim.status, "rate": sim.rate, "murphy": sim.murphy, "dtg": to_dtg(parse_iso(sim.sim_now)),
@@ -218,6 +221,11 @@ def set_clock(body: ClockBody, db: Db, user: User = Depends(need("clock"))) -> d
     if body.status:
         if body.status not in {"PAUSED", "RUNNING"}:
             raise HTTPException(status_code=422, detail="Clock status must be PAUSED or RUNNING.")
+        if body.status == "PAUSED":
+            tick(sim, db)
+            sim.wall_anchor = None
+        if body.status == "RUNNING":
+            sim.wall_anchor = datetime.now(UTC).isoformat()
         sim.status = body.status
     if body.rate:
         if body.rate not in {1, 10, 60}:
@@ -378,7 +386,35 @@ def export_plan(plan_id: str, fmt: str, user: UserDep, db: Db) -> dict[str, Any]
         return {"format": "signal", "bytes": len(text.encode()), "text": text}
     if fmt == "csv":
         return {"format": "csv", "text": _csv(document)}
-    raise HTTPException(status_code=422, detail="Format must be json, csv or signal.")
+    if fmt == "pdf":
+        import base64
+
+        from app.pdfato import ato_pdf
+
+        blob = ato_pdf(document)
+        return {"format": "pdf", "bytes": len(blob), "base64": base64.b64encode(blob).decode()}
+    raise HTTPException(status_code=422, detail="Format must be json, csv, signal or pdf.")
+
+
+@router.put("/plans/{plan_id}/assignments")
+def save_assignments(plan_id: str, body: AssignmentList, db: Db, user: User = Depends(need("plans"))) -> dict[str, Any]:
+    _require_plan(db, plan_id)
+    report = validate(_snapshot(db), body.assignments)
+    if not report["valid"]:
+        message = report["violations"][0]["message"] if report["violations"] else "That edit is not valid."
+        raise HTTPException(status_code=409, detail=message)
+    db.execute(delete(AssignmentRow).where(AssignmentRow.plan_id == plan_id))
+    for row in body.assignments:
+        db.add(AssignmentRow(plan_id=plan_id, payload=row))
+    append_audit(db, actor=user.id, action="plan.edit", ref=plan_id, diff={"assignments": len(body.assignments)})
+    db.commit()
+    return {"plan_id": plan_id, "valid": True}
+
+
+@router.get("/fusion/conflicts")
+def fusion_conflicts(user: UserDep, db: Db) -> dict[str, Any]:
+    del user
+    return {"items": list_conflicts(db)}
 
 
 def _signal(document: dict[str, Any]) -> str:
@@ -434,6 +470,31 @@ def inject_event(body: EventBody, db: Db, user: User = Depends(need("events"))) 
     append_audit(db, actor=user.id, action="event.inject", ref=event_id, diff={"type": body.type})
     db.commit()
     return {"event_id": event_id, "impact": blast, "coas": [_coa_public(row) for row in options]}
+
+
+@router.get("/events/latest")
+def latest_event(user: UserDep, db: Db) -> dict[str, Any]:
+    del user
+    event = db.scalar(select(EventRow).order_by(EventRow.id.desc()))
+    if event is None:
+        return {"event": None, "coas": []}
+    coas = list(db.scalars(select(CoaRow).where(CoaRow.event_id == event.id)).all())
+    return {
+        "event": {"id": event.id, "type": event.type, "severity": event.severity, "payload": event.payload, "source": event.source},
+        "coas": [
+            {
+                "id": row.preset,
+                "coa_id": row.id,
+                "name": row.preset,
+                "recommended": row.recommended,
+                "rationale": row.rationale,
+                "metrics": row.metrics,
+                "diff": row.diff,
+                "changes": len(row.diff or []),
+            }
+            for row in coas
+        ],
+    }
 
 
 def _coa_public(row: dict[str, Any]) -> dict[str, Any]:

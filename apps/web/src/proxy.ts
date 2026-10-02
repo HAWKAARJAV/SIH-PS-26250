@@ -15,6 +15,7 @@ export function proxy(request: NextRequest) {
     "form-action 'self'",
     "frame-ancestors 'none'",
     `connect-src 'self'${ws}`,
+    "worker-src 'self' blob:",
   ].join("; ");
   const requestHeaders = new Headers(request.headers);
   requestHeaders.set("x-nonce", nonce);

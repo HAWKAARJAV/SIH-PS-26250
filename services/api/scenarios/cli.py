@@ -11,6 +11,7 @@ from app.db import configure_engine, get_engine
 from app.security import hash_password
 from app.tables import Base, User
 from app.world import write_world
+from fusion.conflicts import seed_conflicts
 from sqlalchemy import select
 
 from scenarios.generate import generate_world
@@ -42,6 +43,7 @@ def seed(pack: str = "S1", seed_value: int = 26250, scale: str = "M") -> None:
     db = database.SessionLocal()
     world = generate_world(seed_value, pack, scale)
     write_world(db, world)
+    seed_conflicts(db, str(world["epoch"]))
     password = hash_password(settings.demo_password)
     for user_id, email, role, name in USERS:
         existing = db.get(User, user_id)
@@ -50,6 +52,7 @@ def seed(pack: str = "S1", seed_value: int = 26250, scale: str = "M") -> None:
         else:
             existing.password_hash = password
             existing.role = role
+    db.flush()
     if db.scalar(select(User).limit(1)) is not None:
         append_audit(db, actor="system", action="seed", ref=pack, diff={"seed": seed_value, "scale": scale})
     db.commit()

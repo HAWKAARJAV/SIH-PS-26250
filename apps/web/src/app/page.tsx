@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { brand } from "@/config/brand";
 import { team } from "@/config/team";
 
@@ -13,7 +13,17 @@ const BARS = [
 ];
 
 export default function HomePage() {
+  const [impact, setImpact] = useState("No benchmark file is loaded yet.");
   const [struck, setStruck] = useState(false);
+  useEffect(() => {
+    fetch("/api/v1/benchmark")
+      .then((response) => response.json())
+      .then((data: { runs?: number; solver_beats_or_ties_greedy?: number; scale?: string; seeds?: number[] }) => {
+        if (!data.runs) return;
+        setImpact(`Simulated scale ${data.scale}, seeds ${data.seeds?.join(", ")}: the solver beat or tied the greedy baseline in ${data.solver_beats_or_ties_greedy} of ${data.runs} runs.`);
+      })
+      .catch(() => setImpact("The benchmark file could not be read."));
+  }, []);
   const bars = useMemo(
     () =>
       BARS.map((bar) =>
@@ -79,6 +89,7 @@ export default function HomePage() {
           </article>
         ))}
       </section>
+      <p className="mt-8 rounded-xl border border-line bg-surface px-4 py-3 text-sm">{impact}</p>
       {team.length > 0 && (
         <section className="mt-16">
           <h2 className="font-display text-3xl">Team</h2>

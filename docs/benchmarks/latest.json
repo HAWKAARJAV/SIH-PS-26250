@@ -1,0 +1,40 @@
+{
+  "simulated": true,
+  "scale": "S",
+  "seeds": [
+    1,
+    2
+  ],
+  "solver_beats_or_ties_greedy": 2,
+  "runs": 2,
+  "rows": [
+    {
+      "seed": 1,
+      "scale": "S",
+      "pack": "S1",
+      "simulated": true,
+      "greedy_fulfilment": 0.7418,
+      "greedy_served": 5,
+      "greedy_valid": true,
+      "solver_fulfilment": 0.7418,
+      "solver_served": 6,
+      "solver_valid": true,
+      "solver_label": "OPTIMAL",
+      "missions_total": 15
+    },
+    {
+      "seed": 2,
+      "scale": "S",
+      "pack": "S1",
+      "simulated": true,
+      "greedy_fulfilment": 0.7483,
+      "greedy_served": 5,
+      "greedy_valid": true,
+      "solver_fulfilment": 0.7483,
+      "solver_served": 6,
+      "solver_valid": true,
+      "solver_label": "OPTIMAL",
+      "missions_total": 15
+    }
+  ]
+}

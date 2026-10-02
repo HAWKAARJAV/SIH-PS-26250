@@ -19,6 +19,7 @@ const NAV = [
   { href: "/app/fusion", label: "COP Health", group: "Intelligence" },
   { href: "/app/map", label: "Map", group: "Intelligence" },
   { href: "/app/audit", label: "Audit", group: "Governance" },
+  { href: "/app/analytics", label: "Forecasts", group: "Intelligence" },
 ];
 
 export function Shell({ children }: { children: React.ReactNode }) {
@@ -38,6 +39,9 @@ export function Shell({ children }: { children: React.ReactNode }) {
     api<{ dtg: string; pack: string; seed: number }>("/api/v1/clock")
       .then((row) => setClock(`${row.pack} · ${row.dtg} · seed ${row.seed}`))
       .catch((err: unknown) => setError(err instanceof Error ? err.message : "Clock unavailable."));
+    if ("serviceWorker" in navigator) {
+      navigator.serviceWorker.register("/sw.js").catch(() => undefined);
+    }
   }, [router]);
 
   return (

@@ -82,6 +82,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     app.include_router(auth_router)
     app.include_router(ops_router)
+    from app.routers.intel import router as intel_router
+
+    app.include_router(intel_router)
     return app
 
 

@@ -19,6 +19,22 @@ export default function AtoPage() {
   async function open(id: string) {
     setDoc(await api<Ato>(`/api/v1/plans/${id}/ato`));
   }
+  async function pdf(id: string) {
+    setError("");
+    try {
+      const file = await api<{ base64: string }>(`/api/v1/plans/${id}/export?fmt=pdf`);
+      const bytes = Uint8Array.from(atob(file.base64), (char) => char.charCodeAt(0));
+      const url = URL.createObjectURL(new Blob([bytes], { type: "application/pdf" }));
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `${id}.pdf`;
+      link.click();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "The PDF did not download.");
+    }
+  }
+
   async function act(id: string, action: "submit" | "approve" | "publish") {
     setError("");
     try {
@@ -46,6 +62,7 @@ export default function AtoPage() {
             <button type="button" className="text-sm" onClick={() => void act(plan.id, "submit")}>Submit</button>
             <button type="button" className="text-sm" onClick={() => void act(plan.id, "approve")}>Approve</button>
             <button type="button" className="text-sm" onClick={() => void act(plan.id, "publish")}>Publish</button>
+            <button type="button" className="text-sm" onClick={() => void pdf(plan.id)}>PDF</button>
           </li>
         ))}
       </ul>

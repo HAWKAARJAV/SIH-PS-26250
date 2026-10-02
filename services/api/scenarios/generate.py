@@ -187,6 +187,19 @@ def generate_world(seed: int = 26250, pack: str = "S1", scale: str = "M") -> dic
     return apply_pack(world, pack)
 
 
+def _parameters(aircraft: list[dict[str, object]]) -> dict[str, object]:
+    parameters = deepcopy(DEFAULT_PARAMETERS)
+    counts: dict[str, int] = {}
+    for craft in aircraft:
+        key = str(craft["type_id"])
+        counts[key] = counts.get(key, 0) + 1
+    parameters["reserve_by_type"] = {
+        key: min(int(value), max(0, counts.get(key, 0) - 1))
+        for key, value in parameters["reserve_by_type"].items()
+    }
+    return parameters
+
+
 def _pack_offset(pack: str) -> int:
     return {"S1": 0, "S2": 2, "S3": 3, "S4": 4, "S5": 5}.get(pack, 0)
 
@@ -217,7 +230,7 @@ def _build(
         "now": EPOCH,
         "horizon_min": 24 * 60,
         "theatre": "MERIDIAN",
-        "parameters": deepcopy(DEFAULT_PARAMETERS),
+        "parameters": _parameters(aircraft),
         "bases": bases,
         "aircraft_types": types,
         "aircraft": aircraft,

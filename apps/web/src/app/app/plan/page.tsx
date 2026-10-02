@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { Gantt } from "@/components/gantt";
 import { api } from "@/lib/api";
 
 type Assignment = { mission_id: string; tail: string; start: string; end: string; load_out: string };
@@ -13,6 +14,8 @@ export default function PlanPage() {
   const [error, setError] = useState("");
   const [role, setRole] = useState("");
   const [busy, setBusy] = useState(false);
+  const [epoch, setEpoch] = useState("");
+  const [missionIds, setMissionIds] = useState<string[]>([]);
 
   async function refresh(id?: string) {
     const list = await api<{ items: Plan[] }>("/api/v1/plans");
@@ -23,6 +26,8 @@ export default function PlanPage() {
 
   useEffect(() => {
     api<{ role: string }>("/api/v1/auth/me").then((me) => setRole(me.role)).catch(() => setRole(""));
+    api<{ epoch: string }>("/api/v1/clock").then((clock) => setEpoch(clock.epoch)).catch(() => setEpoch(""));
+    api<{ items: { id: string }[] }>("/api/v1/registers/missions").then((data) => setMissionIds(data.items.map((row) => row.id))).catch(() => setMissionIds([]));
     api<{ items: Plan[] }>("/api/v1/plans")
       .then(async (list) => {
         setPlans(list.items);
@@ -31,6 +36,23 @@ export default function PlanPage() {
       })
       .catch((err: unknown) => setError(err instanceof Error ? err.message : "Plans did not load."));
   }, []);
+
+  async function shift(row: Assignment, minutes: number) {
+    if (!active?.assignments) return;
+    const next = active.assignments.map((item) =>
+      item.mission_id === row.mission_id && item.tail === row.tail && item.start === row.start
+        ? { ...item, start: move(item.start, minutes), end: move(item.end, minutes) }
+        : item,
+    );
+    try {
+      await api(`/api/v1/plans/${active.id}/assignments`, { method: "PUT", body: JSON.stringify({ assignments: next }) });
+      setActive({ ...active, assignments: next });
+      setMessage("The move checked out. Zero new violations.");
+      setError("");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "That move snapped back.");
+    }
+  }
 
   async function optimise() {
     setBusy(true);
@@ -70,6 +92,7 @@ export default function PlanPage() {
         ))}
       </div>
       {!active && !error && <p className="mt-8 text-ink-3">All quiet on the unscheduled front. Optimise to draw the first ATO.</p>}
+      {active && epoch && <div className="mt-6"><Gantt rows={active.assignments ?? []} epoch={epoch} onShift={(row, minutes) => void shift(row, minutes)} /></div>}
       {active && (
         <div className="mt-6 overflow-hidden rounded-xl border border-line bg-surface">
           <table className="w-full text-left text-sm">
@@ -93,8 +116,25 @@ export default function PlanPage() {
             Served {active.kpis.missions_served ?? 0} of {active.kpis.missions_total ?? 0}. Fulfilment{" "}
             {active.kpis.value_weighted_fulfilment != null ? `${Math.round(active.kpis.value_weighted_fulfilment * 1000) / 10}%` : "—"}.
           </p>
+          <Unserved served={new Set((active.assignments ?? []).map((row) => row.mission_id))} missions={missionIds} />
         </div>
       )}
     </section>
   );
+}
+
+function Unserved({ served, missions }: { served: Set<string>; missions: string[] }) {
+  const missing = missions.filter((id) => !served.has(id));
+  if (!missing.length) return null;
+  return (
+    <p className="px-3 pb-3 text-sm text-ink-2">
+      Not on this plan: {missing.slice(0, 8).map((id) => (
+        <a key={id} className="mr-2 font-mono text-vyom" href={`/app/missions/${id}`}>{id}</a>
+      ))}
+    </p>
+  );
+}
+
+function move(iso: string, minutes: number) {
+  return new Date(new Date(iso).getTime() + minutes * 60000).toISOString();
 }

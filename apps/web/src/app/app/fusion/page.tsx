@@ -47,6 +47,33 @@ export default function FusionPage() {
           </li>
         ))}
       </ul>
+      <ConflictInbox />
     </section>
+  );
+}
+
+function ConflictInbox() {
+  const [items, setItems] = useState<{ entity_ref: string; field: string; policy: string; observations: { source_id: string; value: string }[] }[]>([]);
+  useEffect(() => {
+    api<{ items: { entity_ref: string; field: string; policy: string; observations: { source_id: string; value: string }[] }[] }>("/api/v1/fusion/conflicts")
+      .then((data) => setItems(data.items))
+      .catch(() => setItems([]));
+  }, []);
+  if (!items.length) return <p className="mt-6 text-sm text-ink-3">No open conflicts in the seeded picture.</p>;
+  return (
+    <div className="mt-6 grid gap-3">
+      <h2 className="font-display text-2xl">Conflict inbox</h2>
+      {items.map((item) => (
+        <article key={`${item.entity_ref}-${item.field}`} className="rounded-xl border border-line bg-surface p-4">
+          <p className="font-mono">{item.entity_ref} · {item.field}</p>
+          <ul className="mt-2 text-sm">
+            {item.observations.map((row) => (
+              <li key={row.source_id}>{row.source_id}: {row.value}</li>
+            ))}
+          </ul>
+          <p className="mt-2 text-sm text-ink-2">{item.policy}</p>
+        </article>
+      ))}
+    </div>
   );
 }

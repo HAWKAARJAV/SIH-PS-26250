@@ -1,0 +1,15 @@
+{
+  "simulated": true,
+  "trained": true,
+  "model": "logistic-regression-v1",
+  "seed": 26250,
+  "holdout_rows": 20,
+  "auc": 0.778,
+  "brier": 0.073,
+  "features": [
+    "hours_to_inspection",
+    "defect_count",
+    "sorties_72h"
+  ],
+  "note": "Holdout score on the seeded fleet. The planner still uses the seeded chance of staying usable."
+}

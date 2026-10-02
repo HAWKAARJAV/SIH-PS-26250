@@ -20,3 +20,12 @@ Selecting a COA stores `submitted_by` as the user who injected the event, so the
 ## D-005 — Plan row is flushed before assignments
 SQLite checks the assignment foreign key before SQLAlchemy inserts the parent plan. `_store_plan` flushes the plan first.
 
+## D-006 — Small theatres cap the reserve
+Scale S keeps only the first aircraft in the fleet plan, so a reserve for a missing type made every plan invalid. Reserve for each type is now the minimum of the doctrine value and one less than the aircraft of that type.
+
+## D-007 — Published benchmark is scale S, seeds 1 and 2
+`docs/benchmarks/latest.json` is the output of `analytics.benchmark.run(range(1, 3))` after D-006. Both runs were valid. The solver served more missions than the greedy baseline in both. These are simulated. The 30-seed S/M/L/XL suite is not run yet.
+
+## D-008 — MapLibre workers may load from blob URLs
+The chart draws airspace and threat rings with MapLibre and no tiles. Its worker is a blob URL, so CSP adds `worker-src 'self' blob:`.
+

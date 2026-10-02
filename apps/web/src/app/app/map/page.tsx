@@ -27,7 +27,13 @@ export default function MapPage() {
           zoom: 6,
           attributionControl: false,
         });
-        map.on("load", () => {
+        map.on("load", async () => {
+          const airspace = await fetchJson<{ items: { polygon?: number[][] }[] }>("/api/v1/registers/airspace");
+          const threats = await fetchJson<{ items: { lat?: number; lon?: number; radius_nm?: number }[] }>("/api/v1/registers/threats");
+          map?.addSource("airspace", { type: "geojson", data: polygons(airspace.items) });
+          map?.addLayer({ id: "airspace-fill", type: "fill", source: "airspace", paint: { "fill-color": "#365C87", "fill-opacity": 0.15 } });
+          map?.addSource("threats", { type: "geojson", data: rings(threats.items) });
+          map?.addLayer({ id: "threat-line", type: "line", source: "threats", paint: { "line-color": "#A92D1B", "line-width": 1.5, "line-dasharray": [2, 1] } });
           data.items.forEach((base) => {
             const marker = document.createElement("button");
             marker.type = "button";
@@ -61,4 +67,43 @@ export default function MapPage() {
       </table>
     </section>
   );
+}
+
+async function fetchJson<T>(path: string): Promise<T> {
+  const response = await fetch(path, { credentials: "include" });
+  if (!response.ok) return { items: [] } as T;
+  return response.json() as Promise<T>;
+}
+
+function polygons(items: { polygon?: number[][] }[]) {
+  return {
+    type: "FeatureCollection" as const,
+    features: items.filter((item) => item.polygon).map((item) => ({
+      type: "Feature" as const,
+      properties: {},
+      geometry: { type: "Polygon" as const, coordinates: [item.polygon!.map(([lat, lon]) => [lon, lat])] },
+    })),
+  };
+}
+
+function rings(items: { lat?: number; lon?: number; radius_nm?: number }[]) {
+  return {
+    type: "FeatureCollection" as const,
+    features: items.filter((item) => item.lat != null && item.lon != null).map((item) => ({
+      type: "Feature" as const,
+      properties: {},
+      geometry: { type: "LineString" as const, coordinates: circle(item.lon!, item.lat!, item.radius_nm ?? 10) },
+    })),
+  };
+}
+
+function circle(lon: number, lat: number, radiusNm: number) {
+  const points = [];
+  const dLat = radiusNm / 60;
+  const dLon = radiusNm / (60 * Math.cos((lat * Math.PI) / 180));
+  for (let index = 0; index <= 24; index += 1) {
+    const angle = (index / 24) * Math.PI * 2;
+    points.push([lon + Math.cos(angle) * dLon, lat + Math.sin(angle) * dLat]);
+  }
+  return points;
 }
