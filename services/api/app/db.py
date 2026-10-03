@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections.abc import Iterator
 
 from sqlalchemy import create_engine, event
+from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.config import Settings
@@ -26,7 +27,7 @@ def configure_engine(settings: Settings) -> None:
     SessionLocal = sessionmaker(bind=_engine, autoflush=False, expire_on_commit=False, future=True)
 
 
-def get_engine():  # type: ignore[no-untyped-def]
+def get_engine() -> Engine:
     if _engine is None:
         raise RuntimeError("Database engine is not configured.")
     return _engine

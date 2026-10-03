@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable, Generator
 from datetime import UTC, datetime, timedelta
 from typing import Annotated
 
@@ -19,7 +20,7 @@ def settings_dep() -> Settings:
     return get_settings()
 
 
-def db_dep() -> Session:
+def db_dep() -> Generator[Session, None, None]:
     yield from session_scope()
 
 
@@ -68,7 +69,7 @@ def csrf_user(request: Request, user: UserDep) -> User:
 CsrfUser = Annotated[User, Depends(csrf_user)]
 
 
-def need(perm: str):
+def need(perm: str) -> Callable[..., User]:
     def checker(user: CsrfUser) -> User:
         if not allows(user.role, perm):
             raise HTTPException(status_code=403, detail="Your role cannot do that.")

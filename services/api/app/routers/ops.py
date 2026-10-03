@@ -182,7 +182,10 @@ def load_scenario(body: LoadBody, db: Db, user: User = Depends(need("clock"))) -
     write_world(db, world)
     append_audit(db, actor=user.id, action="scenario.load", ref=body.pack, diff={"seed": body.seed, "scale": body.scale})
     db.commit()
-    return {"pack": body.pack, "seed": body.seed, "scale": body.scale, "missions": len(world["missions"])}
+    missions = world["missions"]
+    if not isinstance(missions, list):
+        raise HTTPException(status_code=500, detail="The scenario did not load missions.")
+    return {"pack": body.pack, "seed": body.seed, "scale": body.scale, "missions": len(missions)}
 
 
 @router.post("/scenarios/reset")
@@ -321,10 +324,26 @@ def approve_plan(plan_id: str, body: ReasonBody, db: Db, user: User = Depends(ne
     if plan.submitted_by == user.id:
         raise HTTPException(status_code=403, detail="The person who submitted this plan cannot approve it.")
     plan.status = "APPROVED"
+    plan.approved_by = user.id
     db.add(DecisionRow(id=f"DEC-{plan_id}", actor=user.id, kind="approve", reason=body.reason, refs={"plan_id": plan_id}, at=datetime.now(UTC).isoformat()))
     append_audit(db, actor=user.id, action="plan.approve", ref=plan_id, reason=body.reason)
     db.commit()
     return {"status": plan.status}
+
+
+@router.post("/plans/{plan_id}/co-approve")
+def co_approve_plan(plan_id: str, body: ReasonBody, db: Db, user: User = Depends(need("co_approve"))) -> dict[str, str]:
+    plan = _require_plan(db, plan_id)
+    if plan.status != "APPROVED":
+        raise HTTPException(status_code=409, detail="The commander must approve the plan before a co-sign.")
+    if plan.approved_by == user.id or plan.submitted_by == user.id:
+        raise HTTPException(status_code=403, detail="Co-sign must come from someone other than the submitter and the approver.")
+    if plan.co_approved_by:
+        raise HTTPException(status_code=409, detail="This plan is already co-signed.")
+    plan.co_approved_by = user.id
+    append_audit(db, actor=user.id, action="plan.co_approve", ref=plan_id, reason=body.reason)
+    db.commit()
+    return {"status": plan.status, "co_approved_by": user.id}
 
 
 @router.post("/plans/{plan_id}/publish")
@@ -332,6 +351,8 @@ def publish_plan(plan_id: str, body: ReasonBody, db: Db, user: User = Depends(ne
     plan = _require_plan(db, plan_id)
     if plan.status != "APPROVED":
         raise HTTPException(status_code=409, detail="Approve the plan before publishing it.")
+    if not plan.co_approved_by:
+        raise HTTPException(status_code=409, detail="An independent co-sign is required before publish.")
     for other in db.scalars(select(PlanRow).where(PlanRow.status == "PUBLISHED")).all():
         other.status = "SUPERSEDED"
     plan.status = "PUBLISHED"
@@ -508,10 +529,6 @@ def select_coa(coa_id: str, body: ReasonBody, db: Db, user: User = Depends(need(
         raise HTTPException(status_code=404, detail="That course of action is gone.")
     built = {"assignments": coa.assignments, "kpis": coa.metrics, "label": coa.rationale, "solver": {"status": "COA"}}
     plan_id = _store_plan(db, user.id, built, status="PROPOSED")
-    plan = db.get(PlanRow, plan_id)
-    event = db.get(EventRow, coa.event_id)
-    if plan is not None and event is not None:
-        plan.submitted_by = event.source
     coa.plan_id = plan_id
     append_audit(db, actor=user.id, action="coa.select", ref=coa_id, reason=body.reason, diff={"plan_id": plan_id})
     db.commit()

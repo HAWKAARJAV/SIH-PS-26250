@@ -18,7 +18,7 @@ ROLE_PERMS: dict[str, set[str]] = {
     "fleet": {"read", "fleet_write", "stores_write"},
     "crew_officer": {"read", "crew_write"},
     "analyst": {"read", "intel_write"},
-    "auditor": {"read", "audit", "export"},
+    "auditor": {"read", "audit", "export", "co_approve"},
     "admin": {"read", "admin", "connectors", "clock"},
 }
 

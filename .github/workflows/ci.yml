@@ -14,6 +14,7 @@ jobs:
           python-version: "3.12"
       - run: uv sync --directory services/api
       - run: uv run --directory services/api ruff check .
+      - run: uv run --directory services/api mypy app optimiser fusion analytics scenarios
       - run: uv run --directory services/api pytest
 
   web:
@@ -31,4 +32,7 @@ jobs:
       - run: pnpm --filter @vyuha/web lint
       - run: pnpm --filter @vyuha/web typecheck
       - run: pnpm --filter @vyuha/web test
+      - run: pnpm build
       - run: node scripts/check-offline.mjs
+      - run: pnpm exec playwright install chromium
+      - run: pnpm --filter @vyuha/web e2e

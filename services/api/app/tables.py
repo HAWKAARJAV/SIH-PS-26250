@@ -206,6 +206,8 @@ class PlanRow(Base):
     label: Mapped[str] = mapped_column(String(80), default="")
     created_by: Mapped[str] = mapped_column(String(64))
     submitted_by: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    approved_by: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    co_approved_by: Mapped[str | None] = mapped_column(String(64), nullable=True)
     digest: Mapped[str] = mapped_column(String(64), default="")
     version: Mapped[int] = mapped_column(Integer, default=1)
 

@@ -53,7 +53,9 @@ def run(seeds: range = range(1, 6)) -> dict[str, object]:
 def load() -> dict[str, object] | None:
     if not OUT.exists():
         return None
-    return json.loads(OUT.read_text())
+    from typing import cast
+
+    return cast(dict[str, object], json.loads(OUT.read_text()))
 
 
 if __name__ == "__main__":

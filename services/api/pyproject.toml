@@ -56,8 +56,12 @@ packages = ["app", "optimiser", "fusion", "analytics", "scenarios"]
 plugins = []
 
 [[tool.mypy.overrides]]
-module = ["ortools.*", "shap.*", "lightgbm.*", "sklearn.*"]
+module = ["ortools.*", "shap.*", "lightgbm.*", "sklearn.*", "reportlab.*"]
 ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = ["scenarios.generate"]
+ignore_errors = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

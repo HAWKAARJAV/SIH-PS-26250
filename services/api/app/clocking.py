@@ -24,6 +24,6 @@ def tick(sim: SimState, db: Session) -> None:
     minutes = (now - anchor).total_seconds() / 60.0 * max(sim.rate, 1)
     if minutes < 0.05:
         return
-    sim.sim_now = to_iso(add_minutes(parse_iso(sim.sim_now), minutes))
+    sim.sim_now = to_iso(add_minutes(parse_iso(sim.sim_now), int(round(minutes))))
     sim.wall_anchor = now.isoformat()
     db.commit()

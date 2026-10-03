@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from copy import deepcopy
+from typing import Any, cast
 
 import numpy as np
 from optimiser.greedy import greedy
@@ -15,12 +16,13 @@ def monte_carlo(seed: int = 7, runs: int = 20) -> dict[str, object]:
     rng = np.random.Generator(np.random.PCG64(seed))
     served = []
     valid = 0
-    fmc = [row["tail"] for row in base["aircraft"] if row["status"] == "FMC"]
+    aircraft = cast(list[dict[str, Any]], base["aircraft"])
+    fmc = [row["tail"] for row in aircraft if row["status"] == "FMC"]
     for _ in range(runs):
         world = deepcopy(base)
         if fmc:
             victim = fmc[int(rng.integers(0, len(fmc)))]
-            for craft in world["aircraft"]:
+            for craft in cast(list[dict[str, Any]], world["aircraft"]):
                 if craft["tail"] == victim:
                     craft["status"] = "NMC"
                     craft["effective_status"] = "NMC"

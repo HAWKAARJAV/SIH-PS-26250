@@ -53,7 +53,7 @@ def _place(
     preferred = minutes_between(epoch, parse_iso(mission["preferred_start"]))
     partner = _partner_start(snapshot, plan, mission, epoch)
     starts = _starts(mission, epoch, partner if partner is not None else preferred)
-    aircraft = {a["type_id"]: [] for a in snapshot["aircraft"]}
+    aircraft: dict[str, list[dict[str, Any]]] = {a["type_id"]: [] for a in snapshot["aircraft"]}
     for craft in snapshot["aircraft"]:
         aircraft.setdefault(craft["type_id"], []).append(craft)
     crew_by_qual: dict[str, list[dict[str, Any]]] = {}

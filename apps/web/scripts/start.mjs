@@ -1,8 +1,14 @@
 import { spawn } from "node:child_process";
+import { createRequire } from "node:module";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 
+const require = createRequire(import.meta.url);
+const nextBin = join(dirname(require.resolve("next/package.json")), "dist/bin/next");
 const port = process.env.PORT || "3000";
-const child = spawn("next", ["start", "--hostname", "0.0.0.0", "--port", port], {
+
+const child = spawn(process.execPath, [nextBin, "start", "--hostname", "0.0.0.0", "--port", port], {
   stdio: "inherit",
-  shell: true,
+  env: process.env,
 });
 child.on("exit", (code) => process.exit(code ?? 0));

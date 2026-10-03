@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import Any, cast
 
 import numpy as np
 from scenarios.generate import generate_world
@@ -18,7 +19,7 @@ def train(seed: int = 26250) -> dict[str, object]:
     world = generate_world(seed, "S1", "M")
     features = []
     labels = []
-    for craft in world["aircraft"]:
+    for craft in cast(list[dict[str, Any]], world["aircraft"]):
         features.append(
             [
                 float(craft["hours_to_inspection"]),

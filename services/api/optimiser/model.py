@@ -410,7 +410,7 @@ def _weather_ok(snapshot: dict[str, Any], mission: dict[str, Any], minute: int, 
     minima = mission["wx_minima"]
     hits = sum(1 for member in members if member["ceiling_ft"] >= minima["ceiling_ft"] and member["vis_m"] >= minima["vis_m"])
     required = params["stale_wx_p_go_min"] if row.get("freshness") == "STALE" else params["p_go_min"]
-    return hits / len(members) >= required
+    return bool(hits / len(members) >= float(required))
 
 
 def _closed(base: dict[str, Any], minute: int, epoch: Any) -> bool:

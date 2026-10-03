@@ -27,9 +27,22 @@ class DemoBody(BaseModel):
 
 
 def _cookies(response: Response, settings: Cfg, access: str, refresh: str) -> None:
-    common = {"httponly": True, "secure": settings.cookie_secure, "samesite": "lax"}
-    response.set_cookie(ACCESS_COOKIE, access, path="/", **common)
-    response.set_cookie(REFRESH_COOKIE, refresh, path="/api/v1/auth", **common)
+    response.set_cookie(
+        ACCESS_COOKIE,
+        access,
+        path="/",
+        httponly=True,
+        secure=settings.cookie_secure,
+        samesite="lax",
+    )
+    response.set_cookie(
+        REFRESH_COOKIE,
+        refresh,
+        path="/api/v1/auth",
+        httponly=True,
+        secure=settings.cookie_secure,
+        samesite="lax",
+    )
 
 
 def _issue(db: Db, settings: Cfg, user: User, response: Response, action: str) -> dict[str, object]:

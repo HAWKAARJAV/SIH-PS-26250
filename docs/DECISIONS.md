@@ -14,8 +14,14 @@ TypeScript 7.0.2 is the latest npm release, and typescript-eslint 8.71 throws on
 ## D-003 — style-src allows unsafe-inline
 Scripts use a nonce. A style nonce would disable `unsafe-inline` in CSP3 and break component `style` attributes and MapLibre markers. Styles stay `'self' 'unsafe-inline'`.
 
-## D-004 — COA proposal is attributed to the injector
-Selecting a COA stores `submitted_by` as the user who injected the event, so the commander who selects it can still approve. There is one commander account.
+## D-004 — COA proposal is attributed to the injector (superseded)
+Selecting a COA used to store `submitted_by` as the event injector. Superseded by D-010: only explicit submit sets `submitted_by`.
+
+## D-009 — mypy on `scenarios.generate`
+The generator builds nested dict literals for the synthetic theatre. Strict typing every field is deferred; `scenarios.generate` uses a mypy `ignore_errors` override until R1 refactors world types.
+
+## D-010 — Two-person publish with auditor co-sign
+The commander approves (`approved_by`). The auditor co-signs (`co_approved_by`). Publish requires both and forbids co-sign from the submitter or approver. Seven demo roles are unchanged.
 
 ## D-005 — Plan row is flushed before assignments
 SQLite checks the assignment foreign key before SQLAlchemy inserts the parent plan. `_store_plan` flushes the plan first.

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from analytics.assistant import answer
 from analytics.benchmark import load, run
@@ -56,7 +56,7 @@ def serviceability_card(user: UserDep) -> dict[str, Any]:
     path = CARD
     if not path.exists():
         return {"simulated": True, "trained": False, "message": "No model card yet."}
-    return json.loads(path.read_text())
+    return cast(dict[str, Any], json.loads(path.read_text()))
 
 
 @router.post("/forecast/serviceability")

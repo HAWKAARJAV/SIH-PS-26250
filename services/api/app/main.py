@@ -26,7 +26,15 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
         Path(cfg.database_url.removeprefix("sqlite:///")).parent.mkdir(parents=True, exist_ok=True)
     configure_engine(cfg)
-    Base.metadata.create_all(get_engine())
+    engine = get_engine()
+    Base.metadata.create_all(engine)
+    if cfg.database_url.startswith("sqlite"):
+        with engine.begin() as conn:
+            cols = {row[1] for row in conn.execute(text("PRAGMA table_info(plans)")).all()}
+            if "approved_by" not in cols:
+                conn.execute(text("ALTER TABLE plans ADD COLUMN approved_by VARCHAR(64)"))
+            if "co_approved_by" not in cols:
+                conn.execute(text("ALTER TABLE plans ADD COLUMN co_approved_by VARCHAR(64)"))
     app = FastAPI(
         title="VYUHA",
         summary="Synthetic air operations planning prototype. Not for operational use.",

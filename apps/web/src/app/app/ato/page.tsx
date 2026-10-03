@@ -35,10 +35,11 @@ export default function AtoPage() {
     }
   }
 
-  async function act(id: string, action: "submit" | "approve" | "publish") {
+  async function act(id: string, action: "submit" | "approve" | "co-approve" | "publish") {
     setError("");
     try {
-      const result = await api<{ status: string }>(`/api/v1/plans/${id}/${action}`, { method: "POST", body: JSON.stringify({ reason: action }) });
+      const path = action === "co-approve" ? `/api/v1/plans/${id}/co-approve` : `/api/v1/plans/${id}/${action}`;
+      const result = await api<{ status: string }>(path, { method: "POST", body: JSON.stringify({ reason: action }) });
       setNote(`${id} is ${result.status}.`);
       const data = await api<{ items: Plan[] }>("/api/v1/plans");
       setPlans(data.items);
@@ -61,6 +62,7 @@ export default function AtoPage() {
             <button type="button" className="text-sm text-vyom" onClick={() => void open(plan.id)}>View</button>
             <button type="button" className="text-sm" onClick={() => void act(plan.id, "submit")}>Submit</button>
             <button type="button" className="text-sm" onClick={() => void act(plan.id, "approve")}>Approve</button>
+            <button type="button" className="text-sm" onClick={() => void act(plan.id, "co-approve")}>Co-sign</button>
             <button type="button" className="text-sm" onClick={() => void act(plan.id, "publish")}>Publish</button>
             <button type="button" className="text-sm" onClick={() => void pdf(plan.id)}>PDF</button>
           </li>
