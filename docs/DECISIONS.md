@@ -35,3 +35,9 @@ Scale S keeps only the first aircraft in the fleet plan, so a reserve for a miss
 ## D-008 — MapLibre workers may load from blob URLs
 The chart draws airspace and threat rings with MapLibre and no tiles. Its worker is a blob URL, so CSP adds `worker-src 'self' blob:`.
 
+## D-011 — Event apply does not clear plans
+`write_world()` no longer deletes `AssignmentRow` / plans. Only `reset_operational=True` (seed and scenario load) clears operational artefacts. Event injection persists theatre rows without wiping assignments.
+
+## D-012 — CP-SAT models 15-minute launch and recovery bins
+Launch and recovery capacity constraints use per-bin literals tied to the mission start variable, matching the independent validator. The previous single-bin stub (`rate × 96`) is removed.
+

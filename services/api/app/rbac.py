@@ -13,11 +13,11 @@ ROLES = (
 )
 
 ROLE_PERMS: dict[str, set[str]] = {
-    "commander": {"read", "guidance", "approve", "publish", "select_coa", "clock", "export"},
+    "commander": {"read", "guidance", "approve", "publish", "select_coa", "clock", "export", "ack_ato"},
     "planner": {"read", "missions", "optimise", "plans", "submit", "events", "export"},
     "fleet": {"read", "fleet_write", "stores_write"},
     "crew_officer": {"read", "crew_write"},
-    "analyst": {"read", "intel_write"},
+    "analyst": {"read", "intel_write", "intel_events"},
     "auditor": {"read", "audit", "export", "co_approve"},
     "admin": {"read", "admin", "connectors", "clock"},
 }

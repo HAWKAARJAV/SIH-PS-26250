@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { brand } from "@/config/brand";
 import { team } from "@/config/team";
+import { EmptyState, ErrorState, LoadingState } from "@/components/states";
 
 const BARS = [
   { id: "ADP", label: "ADP", start: 8, span: 18, lane: 0 },
@@ -13,16 +14,26 @@ const BARS = [
 ];
 
 export default function HomePage() {
-  const [impact, setImpact] = useState("No benchmark file is loaded yet.");
+  const [impact, setImpact] = useState("");
+  const [benchState, setBenchState] = useState<"loading" | "ready" | "empty" | "error">("loading");
   const [struck, setStruck] = useState(false);
   useEffect(() => {
     fetch("/api/v1/benchmark")
-      .then((response) => response.json())
-      .then((data: { runs?: number; solver_beats_or_ties_greedy?: number; scale?: string; seeds?: number[] }) => {
-        if (!data.runs) return;
-        setImpact(`Simulated scale ${data.scale}, seeds ${data.seeds?.join(", ")}: the solver beat or tied the greedy baseline in ${data.solver_beats_or_ties_greedy} of ${data.runs} runs.`);
+      .then((response) => {
+        if (!response.ok) throw new Error("The benchmark file could not be read.");
+        return response.json() as Promise<{ runs?: number; solver_beats_or_ties_greedy?: number; scale?: string; seeds?: number[] }>;
       })
-      .catch(() => setImpact("The benchmark file could not be read."));
+      .then((data) => {
+        if (!data.runs) {
+          setBenchState("empty");
+          return;
+        }
+        setImpact(
+          `SIMULATED BENCHMARK · scale ${data.scale} · seeds ${data.seeds?.join(", ")}: solver beat or tied greedy in ${data.solver_beats_or_ties_greedy} of ${data.runs} runs.`,
+        );
+        setBenchState("ready");
+      })
+      .catch(() => setBenchState("error"));
   }, []);
   const bars = useMemo(
     () =>
@@ -89,7 +100,18 @@ export default function HomePage() {
           </article>
         ))}
       </section>
-      <p className="mt-8 rounded-xl border border-line bg-surface px-4 py-3 text-sm">{impact}</p>
+      <section className="mt-16">
+        <h2 className="font-display text-3xl">Seven domains, one picture</h2>
+        <ul className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+          {["Aircraft", "Crew", "Stores", "Airspace", "Weather", "Threats", "Tasking", "Execution feedback"].map((name) => (
+            <li key={name} className="rounded-lg border border-line bg-surface px-3 py-2 text-sm">{name}</li>
+          ))}
+        </ul>
+      </section>
+      {benchState === "loading" && <LoadingState label="Reading the benchmark file…" />}
+      {benchState === "error" && <ErrorState message="The benchmark file could not be read." />}
+      {benchState === "empty" && <EmptyState title="No benchmark file" detail="Nothing is published yet, so this line stays blank." />}
+      {benchState === "ready" && <p className="mt-8 rounded-xl border border-line bg-surface px-4 py-3 text-sm">{impact}</p>}
       {team.length > 0 && (
         <section className="mt-16">
           <h2 className="font-display text-3xl">Team</h2>

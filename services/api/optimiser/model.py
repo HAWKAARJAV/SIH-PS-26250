@@ -43,6 +43,7 @@ def solve_cpsat(
     tanker_intervals: dict[str, list[Any]] = defaultdict(list)
     stock_terms: dict[tuple[str, str], list[Any]] = defaultdict(list)
     launch_terms: dict[tuple[str, int], list[Any]] = defaultdict(list)
+    recovery_terms: dict[tuple[str, int], list[Any]] = defaultdict(list)
     mission_state: dict[str, dict[str, Any]] = {}
     tail_uses: dict[str, list[Any]] = defaultdict(list)
     crew_loads: dict[str, list[tuple[Any, int]]] = defaultdict(list)
@@ -65,6 +66,7 @@ def solve_cpsat(
             tanker_intervals,
             stock_terms,
             launch_terms,
+            recovery_terms,
             tail_uses,
             crew_loads,
         )
@@ -85,6 +87,7 @@ def solve_cpsat(
             model.add_no_overlap(intervals)
     _cap_stock(model, snapshot, stock_terms)
     _cap_launch(model, snapshot, launch_terms)
+    _cap_recovery(model, snapshot, recovery_terms)
     _cap_sorties(model, snapshot, tail_uses)
     _cap_duty(model, snapshot, crew_loads)
     _link_dependencies(model, snapshot, mission_state)
@@ -133,6 +136,7 @@ def _build_mission(
     tanker_intervals: dict[str, list[Any]],
     stock_terms: dict[tuple[str, str], list[Any]],
     launch_terms: dict[tuple[str, int], list[Any]],
+    recovery_terms: dict[tuple[str, int], list[Any]],
     tail_uses: dict[str, list[Any]],
     crew_loads: dict[str, list[tuple[Any, int]]],
 ) -> dict[str, Any] | None:
@@ -187,7 +191,7 @@ def _build_mission(
                     start, int(mission["duration_min"]), served, f"as_{mission['id']}_{block_id}"
                 )
             )
-    _launch_bins(model, mission, served, start, launch_terms)
+    _rate_bins(model, snapshot, mission, served, start, launch_terms, recovery_terms)
     _objective_terms(model, snapshot, mission, served, start, epoch, weight, previous_rows, slot_vars, objective)
     if frozen_rows:
         _pin_frozen(model, mission, slot_vars, frozen_rows)
@@ -291,28 +295,57 @@ def _objective_terms(
     model.add(late == 0).only_enforce_if(~served)
     objective.append(late * -int(weight.get("lateness", 1)))
     if previous_rows and slot_vars:
-        tail = previous_rows[0]["tail"]
-        literals = slot_vars[0][0]
-        if tail in literals:
-            objective.append((served - literals[tail]) * -int(weight.get("stability", 0)))
+        prior_by_slot = {row["slot"]: row for row in previous_rows}
+        stab = int(weight.get("stability", 0))
+        for slot, (aircraft_lits, _) in zip(mission["slots"], slot_vars, strict=False):
+            prior = prior_by_slot.get(slot["slot"])
+            if prior is None:
+                continue
+            if prior["tail"] in aircraft_lits:
+                objective.append((served - aircraft_lits[prior["tail"]]) * -stab)
+            prev_start = minutes_between(epoch, parse_iso(prior["start"]))
+            shift = model.new_int_var(0, int(snapshot["horizon_min"]), f"stab_{mission['id']}_{slot['slot']}")
+            model.add(shift >= start - prev_start).only_enforce_if(served)
+            model.add(shift >= prev_start - start).only_enforce_if(served)
+            model.add(shift == 0).only_enforce_if(~served)
+            objective.append(shift * -max(1, stab // 100))
 
 
-def _launch_bins(
+def _rate_bins(
     model: cp_model.CpModel,
+    snapshot: dict[str, Any],
     mission: dict[str, Any],
     served: Any,
     start: Any,
     launch_terms: dict[tuple[str, int], list[Any]],
+    recovery_terms: dict[tuple[str, int], list[Any]],
 ) -> None:
-    # Count the preferred bin only as a conservative capacity signal; the validator
-    # rechecks every 15-minute bin on the concrete start.
-    lo = minutes_between  # silence linters if unused
-    del lo
-    window_bin = 0
-    present = model.new_bool_var(f"bin_{mission['id']}")
-    model.add(present == served)
-    launch_terms[(mission["launch_base"], window_bin)].append(present)
-    del start
+    horizon = int(snapshot["horizon_min"])
+    duration = int(mission["duration_min"])
+    max_bin = (horizon + duration) // 15 + 2
+    launch_lits: list[Any] = []
+    recovery_lits: list[Any] = []
+    for bin_index in range(max_bin):
+        lo = bin_index * 15
+        hi = lo + 14
+        launch_lit = model.new_bool_var(f"launch_{mission['id']}_{bin_index}")
+        model.add(start >= lo).only_enforce_if(launch_lit)
+        model.add(start <= hi).only_enforce_if(launch_lit)
+        model.add_implication(launch_lit, served)
+        launch_lits.append(launch_lit)
+        launch_terms[(mission["launch_base"], bin_index)].append(launch_lit)
+
+        recovery_lit = model.new_bool_var(f"recover_{mission['id']}_{bin_index}")
+        model.add(start + duration >= lo).only_enforce_if(recovery_lit)
+        model.add(start + duration <= hi).only_enforce_if(recovery_lit)
+        model.add_implication(recovery_lit, served)
+        recovery_lits.append(recovery_lit)
+        recovery_terms[(mission["recover_base"], bin_index)].append(recovery_lit)
+
+    if launch_lits:
+        model.add(sum(launch_lits) == served)
+    if recovery_lits:
+        model.add(sum(recovery_lits) == served)
 
 
 def _cap_sorties(model: cp_model.CpModel, snapshot: dict[str, Any], uses: dict[str, list[Any]]) -> None:
@@ -368,9 +401,17 @@ def _cap_stock(model: cp_model.CpModel, snapshot: dict[str, Any], terms: dict[tu
 
 
 def _cap_launch(model: cp_model.CpModel, snapshot: dict[str, Any], terms: dict[tuple[str, int], list[Any]]) -> None:
-    rates = {base["id"]: int(base["launch_rate_15m"]) * 96 for base in snapshot["bases"]}
+    rates = {base["id"]: int(base["launch_rate_15m"]) for base in snapshot["bases"]}
     for (base_id, _bin), literals in terms.items():
-        model.add(sum(literals) <= rates.get(base_id, 1))
+        if literals:
+            model.add(sum(literals) <= rates.get(base_id, 1))
+
+
+def _cap_recovery(model: cp_model.CpModel, snapshot: dict[str, Any], terms: dict[tuple[str, int], list[Any]]) -> None:
+    rates = {base["id"]: int(base["recovery_rate_15m"]) for base in snapshot["bases"]}
+    for (base_id, _bin), literals in terms.items():
+        if literals:
+            model.add(sum(literals) <= rates.get(base_id, 1))
 
 
 def _allowed_starts(snapshot: dict[str, Any], mission: dict[str, Any], epoch: Any) -> list[int]:

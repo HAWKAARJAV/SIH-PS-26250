@@ -13,7 +13,7 @@ from scenarios.generate import generate_world
 OUT = Path(__file__).resolve().parents[3] / "docs" / "benchmarks" / "latest.json"
 
 
-def run(seeds: range = range(1, 6)) -> dict[str, object]:
+def run(seeds: range = range(1, 6), *, persist: bool = True) -> dict[str, object]:
     rows = []
     for seed in seeds:
         world = generate_world(seed, "S1", "S")
@@ -45,8 +45,9 @@ def run(seeds: range = range(1, 6)) -> dict[str, object]:
         "runs": len(rows),
         "rows": rows,
     }
-    OUT.parent.mkdir(parents=True, exist_ok=True)
-    OUT.write_text(json.dumps(payload, indent=2))
+    if persist:
+        OUT.parent.mkdir(parents=True, exist_ok=True)
+        OUT.write_text(json.dumps(payload, indent=2))
     return payload
 
 

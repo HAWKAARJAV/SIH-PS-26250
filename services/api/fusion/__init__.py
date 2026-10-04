@@ -1,4 +1,4 @@
-"""Feed policy applied when a snapshot is read. Stored status is left intact."""
+"""Feed policy and fused snapshot."""
 
 from __future__ import annotations
 

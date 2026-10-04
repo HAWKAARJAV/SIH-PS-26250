@@ -22,10 +22,17 @@ export default defineConfig({
     ? undefined
     : [
         {
-          command: "uv run --directory services/api uvicorn app.main:app --host 127.0.0.1 --port 8000",
+          command:
+            "uv run --directory services/api python -m scenarios.cli seed && uv run --directory services/api uvicorn app.main:app --host 127.0.0.1 --port 8000",
           cwd: repoRoot,
           url: "http://127.0.0.1:8000/healthz",
           timeout: 90_000,
+          env: {
+            ...process.env,
+            DEMO_MODE: "true",
+            JWT_SECRET: "test-secret-at-least-32-bytes-long",
+            COOKIE_SECURE: "false",
+          },
         },
         {
           command: "pnpm --filter @vyuha/web start",

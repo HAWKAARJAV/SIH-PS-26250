@@ -29,8 +29,11 @@ def append_audit(
     previous = db.scalar(select(AuditEntry).order_by(AuditEntry.seq.desc()).limit(1))
     prev_hash = previous.hash if previous else "GENESIS"
     seq = (previous.seq + 1) if previous else 1
+    at = datetime.now(UTC)
+    at_label = at.replace(tzinfo=None).isoformat()
     body = {
         "seq": seq,
+        "at": at_label,
         "actor": actor,
         "action": action,
         "ref": ref,
@@ -41,7 +44,7 @@ def append_audit(
     digest = hashlib.sha256(_canonical(body).encode()).hexdigest()
     entry = AuditEntry(
         seq=seq,
-        at=datetime.now(UTC),
+        at=at,
         actor=actor,
         action=action,
         ref=ref,
@@ -58,8 +61,12 @@ def verify_chain(db: Session) -> dict[str, Any]:
     rows = list(db.scalars(select(AuditEntry).order_by(AuditEntry.seq.asc())))
     prev = "GENESIS"
     for row in rows:
-        body = {
+        at_label = row.at.isoformat()
+        if row.at.tzinfo is not None:
+            at_label = row.at.astimezone(UTC).replace(tzinfo=None).isoformat()
+        body_at = {
             "seq": row.seq,
+            "at": at_label,
             "actor": row.actor,
             "action": row.action,
             "ref": row.ref,
@@ -67,8 +74,11 @@ def verify_chain(db: Session) -> dict[str, Any]:
             "reason": row.reason,
             "prev_hash": row.prev_hash,
         }
-        digest = hashlib.sha256(_canonical(body).encode()).hexdigest()
-        if row.prev_hash != prev or row.hash != digest:
+        body_legacy = {key: value for key, value in body_at.items() if key != "at"}
+        digest_at = hashlib.sha256(_canonical(body_at).encode()).hexdigest()
+        digest_legacy = hashlib.sha256(_canonical(body_legacy).encode()).hexdigest()
+        digest_ok = row.hash in {digest_at, digest_legacy}
+        if row.prev_hash != prev or not digest_ok:
             return {"valid": False, "broken_seq": row.seq, "entries": len(rows)}
         prev = row.hash
     return {"valid": True, "entries": len(rows), "head": prev}

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Gantt } from "@/components/gantt";
+import { EmptyState, ErrorState, LoadingState, StatusBadge } from "@/components/states";
 import { api } from "@/lib/api";
 
 type Assignment = { mission_id: string; tail: string; start: string; end: string; load_out: string };
@@ -14,6 +15,7 @@ export default function PlanPage() {
   const [error, setError] = useState("");
   const [role, setRole] = useState("");
   const [busy, setBusy] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [epoch, setEpoch] = useState("");
   const [missionIds, setMissionIds] = useState<string[]>([]);
 
@@ -34,7 +36,8 @@ export default function PlanPage() {
         const chosen = list.items[0]?.id;
         if (chosen) setActive(await api<Plan>(`/api/v1/plans/${chosen}`));
       })
-      .catch((err: unknown) => setError(err instanceof Error ? err.message : "Plans did not load."));
+      .catch((err: unknown) => setError(err instanceof Error ? err.message : "Plans did not load."))
+      .finally(() => setLoading(false));
   }, []);
 
   async function shift(row: Assignment, minutes: number) {
@@ -51,6 +54,32 @@ export default function PlanPage() {
       setError("");
     } catch (err) {
       setError(err instanceof Error ? err.message : "That move snapped back.");
+    }
+  }
+
+  async function validatePlan() {
+    if (!active?.assignments) return;
+    setError("");
+    try {
+      const report = await api<{ valid: boolean; violations: { message: string }[] }>("/api/v1/plans/validate", {
+        method: "POST",
+        body: JSON.stringify({ assignments: active.assignments }),
+      });
+      setMessage(report.valid ? "Validator PASS · 0 hard violations." : report.violations[0]?.message || "Validation failed.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Validation failed.");
+    }
+  }
+
+  async function submitPlan() {
+    if (!active) return;
+    setError("");
+    try {
+      await api(`/api/v1/plans/${active.id}/submit`, { method: "POST", body: JSON.stringify({ reason: "Planner submission." }) });
+      setMessage(`${active.id} submitted for commander approval.`);
+      await refresh(active.id);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Submit failed.");
     }
   }
 
@@ -74,24 +103,32 @@ export default function PlanPage() {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="font-display text-4xl">Planner</h1>
         {role === "planner" && (
-          <button className="rounded-lg bg-ember px-4 py-3 text-surface disabled:opacity-60" type="button" disabled={busy} onClick={() => void optimise()}>
-            {busy ? "Optimising…" : "Optimise"}
-          </button>
+          <div className="flex flex-wrap gap-2">
+            <button className="rounded-lg bg-ember px-4 py-3 text-surface disabled:opacity-60" type="button" disabled={busy} onClick={() => void optimise()}>
+              {busy ? "Optimising…" : "Optimise"}
+            </button>
+            <button className="rounded-lg border border-line-strong px-4 py-3" type="button" onClick={() => void validatePlan()}>Validate</button>
+            <button className="rounded-lg border border-line-strong px-4 py-3" type="button" onClick={() => void submitPlan()}>Submit</button>
+          </div>
         )}
         {role !== "" && role !== "planner" && (
           <p className="text-sm text-ink-2">An ops planner runs the optimiser. You can read the result.</p>
         )}
       </div>
       {message && <p className="mt-4 text-sm text-moss">{message}</p>}
-      {error && <p className="mt-4 text-sm text-brick" role="alert">{error}</p>}
+      {loading && <LoadingState label="Loading plans…" />}
+      {error && <ErrorState message={error} />}
       <div className="mt-4 flex gap-2 overflow-x-auto">
         {plans.map((plan) => (
-          <button key={plan.id} className="rounded-full border border-line px-3 py-1 text-sm" type="button" onClick={() => void refresh(plan.id)}>
-            {plan.id} · {plan.status}
+          <button key={plan.id} className="flex items-center gap-2 rounded-full border border-line px-3 py-1 text-sm" type="button" onClick={() => void refresh(plan.id)}>
+            <span className="font-mono">{plan.id}</span>
+            <StatusBadge tone={plan.status === "PUBLISHED" ? "ok" : plan.status === "DRAFT" ? "neutral" : "info"}>{plan.status}</StatusBadge>
           </button>
         ))}
       </div>
-      {!active && !error && <p className="mt-8 text-ink-3">All quiet on the unscheduled front. Optimise to draw the first ATO.</p>}
+      {!loading && !active && !error && (
+        <EmptyState title="No plan yet" detail="All quiet on the unscheduled front. Optimise to draw the first ATO." />
+      )}
       {active && epoch && <div className="mt-6"><Gantt rows={active.assignments ?? []} epoch={epoch} onShift={(row, minutes) => void shift(row, minutes)} /></div>}
       {active && (
         <div className="mt-6 overflow-hidden rounded-xl border border-line bg-surface">

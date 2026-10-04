@@ -9,11 +9,12 @@ from datetime import UTC, datetime
 from typing import Any
 
 from fastapi import APIRouter, Depends, Header, HTTPException
-from fusion import apply_feed_policy
 from fusion.conflicts import conflicts as list_conflicts
+from fusion.snapshot import fuse
 from optimiser.explain import why_not
 from optimiser.plan import build_plan
-from optimiser.retask import apply_event, courses_of_action, impact
+from optimiser.retask import _diff as assignment_diff
+from optimiser.retask import apply_event, courses_of_action, impact, rank_coas
 from optimiser.timeutil import parse_iso, to_dtg
 from optimiser.validator import validate
 from pydantic import BaseModel
@@ -22,8 +23,10 @@ from sqlalchemy import delete, select
 
 from app.auditlog import append_audit, verify_chain
 from app.clocking import tick
-from app.deps import Db, UserDep, need
+from app.deps import CsrfUser, Db, UserDep, need
+from app.mission_import import MissionImport, load_import_rows, rejection_reason
 from app.rbac import MASKED_ROLES
+from app.schemas import AssignmentListIn
 from app.tables import (
     AckRow,
     AircraftRow,
@@ -46,9 +49,31 @@ UNITS = ["Wing Alfa", "Wing Bravo", "Wing Charlie", "Wing Delta"]
 
 def _snapshot(db: Db) -> dict[str, Any]:
     try:
-        return apply_feed_policy(read_world(db))
+        return fuse(read_world(db))
     except LookupError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+def _next_event_id(db: Db) -> str:
+    rows = list(db.scalars(select(EventRow.id)).all())
+    return f"EVT-{len(rows) + 1:08d}"
+
+
+def _normalize_event_type(kind: str) -> str:
+    return {
+        "BASE_CLOSED": "BASE_STATUS",
+        "WEATHER_DEGRADATION": "WEATHER_UPDATE",
+        "THREAT_EXPANSION": "THREAT_UPDATE",
+        "AIRSPACE_BLOCKED": "AIRSPACE_CHANGE",
+    }.get(kind, kind)
+
+
+PLANNER_EVENTS = {
+    "AIRCRAFT_NMC", "AIRCRAFT_RTS", "CREW_UNAVAILABLE", "BASE_STATUS", "BASE_CLOSED",
+    "WEATHER_UPDATE", "WEATHER_DEGRADATION", "STORE_SHORTAGE", "NEW_TASK", "TASK_CHANGED",
+    "TANKER_UNAVAILABLE", "SORTIE_FEEDBACK",
+}
+ANALYST_EVENTS = {"THREAT_UPDATE", "THREAT_EXPANSION", "AIRSPACE_CHANGE", "AIRSPACE_BLOCKED", "WEATHER_UPDATE", "WEATHER_DEGRADATION"}
 
 
 def _version(if_match: str | None, current: int) -> None:
@@ -167,6 +192,8 @@ def patch_stock(
         raise HTTPException(status_code=404, detail="That stock row does not exist.")
     _version(if_match, row.version)
     if body.qty is not None:
+        if body.qty < 0:
+            raise HTTPException(status_code=422, detail="Quantity cannot be negative.")
         row.qty = body.qty
     row.version += 1
     append_audit(db, actor=user.id, action="stock.update", ref=str(stock_id), diff={"qty": row.qty}, reason=body.reason)
@@ -179,7 +206,7 @@ def load_scenario(body: LoadBody, db: Db, user: User = Depends(need("clock"))) -
     if body.pack not in {"S1", "S2", "S3", "S4", "S5"} or body.scale not in {"S", "M", "L", "XL"}:
         raise HTTPException(status_code=422, detail="Unknown scenario pack or scale.")
     world = generate_world(body.seed, body.pack, body.scale)
-    write_world(db, world)
+    write_world(db, world, reset_operational=True)
     append_audit(db, actor=user.id, action="scenario.load", ref=body.pack, diff={"seed": body.seed, "scale": body.scale})
     db.commit()
     missions = world["missions"]
@@ -206,9 +233,10 @@ def get_clock(user: UserDep, db: Db) -> dict[str, Any]:
     sim = db.get(SimState, 1)
     if sim is None:
         raise HTTPException(status_code=409, detail="No scenario is loaded.")
-    tick(sim, db)
+    from app.clocking import projected_sim_now
+
     return {
-        "pack": sim.pack, "seed": sim.seed, "scale": sim.scale, "epoch": sim.epoch, "sim_now": sim.sim_now,
+        "pack": sim.pack, "seed": sim.seed, "scale": sim.scale, "epoch": sim.epoch, "sim_now": projected_sim_now(sim),
         "status": sim.status, "rate": sim.rate, "murphy": sim.murphy, "dtg": to_dtg(parse_iso(sim.sim_now)),
         "version": sim.version,
     }
@@ -244,14 +272,10 @@ def set_clock(body: ClockBody, db: Db, user: User = Depends(need("clock"))) -> d
     return get_clock(user, db)
 
 
-class AssignmentList(BaseModel):
-    assignments: list[dict[str, Any]]
-
-
 @router.post("/plans/validate")
-def validate_assignments(body: AssignmentList, db: Db, user: User = Depends(need("read"))) -> dict[str, Any]:
+def validate_assignments(body: AssignmentListIn, db: Db, user: User = Depends(need("read"))) -> dict[str, Any]:
     del user
-    return validate(_snapshot(db), body.assignments)
+    return validate(_snapshot(db), body.as_dicts())
 
 
 @router.post("/plans/optimise")
@@ -309,6 +333,13 @@ def _plan_brief(plan: PlanRow) -> dict[str, Any]:
 @router.post("/plans/{plan_id}/submit")
 def submit_plan(plan_id: str, body: ReasonBody, db: Db, user: User = Depends(need("submit"))) -> dict[str, str]:
     plan = _require_plan(db, plan_id)
+    if plan.status != "DRAFT":
+        raise HTTPException(status_code=409, detail="Only a draft plan can be submitted.")
+    assignments = [row.payload for row in db.scalars(select(AssignmentRow).where(AssignmentRow.plan_id == plan_id)).all()]
+    report = validate(_snapshot(db), assignments)
+    if not report["valid"]:
+        message = report["violations"][0]["message"] if report["violations"] else "This plan fails validation."
+        raise HTTPException(status_code=409, detail=message)
     plan.status = "PROPOSED"
     plan.submitted_by = user.id
     append_audit(db, actor=user.id, action="plan.submit", ref=plan_id, reason=body.reason)
@@ -321,6 +352,11 @@ def approve_plan(plan_id: str, body: ReasonBody, db: Db, user: User = Depends(ne
     plan = _require_plan(db, plan_id)
     if plan.status != "PROPOSED":
         raise HTTPException(status_code=409, detail="Only a proposed plan can be approved.")
+    assignments = [row.payload for row in db.scalars(select(AssignmentRow).where(AssignmentRow.plan_id == plan_id)).all()]
+    report = validate(_snapshot(db), assignments)
+    if not report["valid"]:
+        message = report["violations"][0]["message"] if report["violations"] else "This plan fails validation."
+        raise HTTPException(status_code=409, detail=message)
     if plan.submitted_by == user.id:
         raise HTTPException(status_code=403, detail="The person who submitted this plan cannot approve it.")
     plan.status = "APPROVED"
@@ -346,6 +382,17 @@ def co_approve_plan(plan_id: str, body: ReasonBody, db: Db, user: User = Depends
     return {"status": plan.status, "co_approved_by": user.id}
 
 
+@router.post("/plans/{plan_id}/reject")
+def reject_plan(plan_id: str, body: ReasonBody, db: Db, user: User = Depends(need("approve"))) -> dict[str, str]:
+    plan = _require_plan(db, plan_id)
+    if plan.status != "PROPOSED":
+        raise HTTPException(status_code=409, detail="Only a proposed plan can be rejected.")
+    plan.status = "REJECTED"
+    append_audit(db, actor=user.id, action="plan.reject", ref=plan_id, reason=body.reason)
+    db.commit()
+    return {"status": plan.status}
+
+
 @router.post("/plans/{plan_id}/publish")
 def publish_plan(plan_id: str, body: ReasonBody, db: Db, user: User = Depends(need("publish"))) -> dict[str, Any]:
     plan = _require_plan(db, plan_id)
@@ -353,6 +400,14 @@ def publish_plan(plan_id: str, body: ReasonBody, db: Db, user: User = Depends(ne
         raise HTTPException(status_code=409, detail="Approve the plan before publishing it.")
     if not plan.co_approved_by:
         raise HTTPException(status_code=409, detail="An independent co-sign is required before publish.")
+    assignments = [row.payload for row in db.scalars(select(AssignmentRow).where(AssignmentRow.plan_id == plan_id)).all()]
+    report = validate(_snapshot(db), assignments)
+    if not report["valid"]:
+        message = report["violations"][0]["message"] if report["violations"] else "This plan fails validation."
+        raise HTTPException(status_code=409, detail=message)
+    digest = hashlib.sha256(json.dumps(assignments, sort_keys=True).encode()).hexdigest()
+    if plan.digest != digest:
+        raise HTTPException(status_code=409, detail="Plan digest does not match assignments. Create a new draft version.")
     for other in db.scalars(select(PlanRow).where(PlanRow.status == "PUBLISHED")).all():
         other.status = "SUPERSEDED"
     plan.status = "PUBLISHED"
@@ -364,7 +419,7 @@ def publish_plan(plan_id: str, body: ReasonBody, db: Db, user: User = Depends(ne
 
 
 @router.post("/plans/{plan_id}/ack")
-def acknowledge(plan_id: str, body: ReasonBody, db: Db, user: User = Depends(need("read"))) -> dict[str, str]:
+def acknowledge(plan_id: str, body: ReasonBody, db: Db, user: User = Depends(need("ack_ato"))) -> dict[str, str]:
     row = db.scalar(select(AckRow).where(AckRow.plan_id == plan_id, AckRow.state == "PENDING"))
     if row is None:
         raise HTTPException(status_code=404, detail="Nothing is waiting for acknowledgement.")
@@ -373,6 +428,34 @@ def acknowledge(plan_id: str, body: ReasonBody, db: Db, user: User = Depends(nee
     append_audit(db, actor=user.id, action="ato.ack", ref=plan_id, diff={"unit": row.unit}, reason=body.reason)
     db.commit()
     return {"unit": row.unit, "state": "ACK"}
+
+
+@router.get("/plans/{plan_id}/ato-diff")
+def ato_diff(plan_id: str, user: UserDep, db: Db) -> dict[str, Any]:
+    del user
+    _require_plan(db, plan_id)
+    previous = db.scalar(
+        select(PlanRow)
+        .where(PlanRow.status.in_(("PUBLISHED", "SUPERSEDED")), PlanRow.id != plan_id)
+        .order_by(PlanRow.version_no.desc())
+    )
+    current_rows = [row.payload for row in db.scalars(select(AssignmentRow).where(AssignmentRow.plan_id == plan_id)).all()]
+    prior_rows: list[dict[str, Any]] = []
+    if previous is not None:
+        prior_rows = [row.payload for row in db.scalars(select(AssignmentRow).where(AssignmentRow.plan_id == previous.id)).all()]
+    changes = assignment_diff(prior_rows, current_rows)
+    p1_dropped = sum(1 for row in changes if row.get("kind") == "dropped")
+    return {
+        "plan_id": plan_id,
+        "previous_plan_id": previous.id if previous else None,
+        "summary": (
+            f"{len(changes)} assignment changes · "
+            f"{sum(1 for row in changes if row.get('kind') == 'moved')} moved · "
+            f"{p1_dropped} dropped slots"
+        ),
+        "changes": changes,
+        "hard_violations": len(validate(_snapshot(db), current_rows)["violations"]),
+    }
 
 
 @router.get("/plans/{plan_id}/ato")
@@ -418,16 +501,22 @@ def export_plan(plan_id: str, fmt: str, user: UserDep, db: Db) -> dict[str, Any]
 
 
 @router.put("/plans/{plan_id}/assignments")
-def save_assignments(plan_id: str, body: AssignmentList, db: Db, user: User = Depends(need("plans"))) -> dict[str, Any]:
-    _require_plan(db, plan_id)
-    report = validate(_snapshot(db), body.assignments)
+def save_assignments(plan_id: str, body: AssignmentListIn, db: Db, user: User = Depends(need("plans"))) -> dict[str, Any]:
+    plan = _require_plan(db, plan_id)
+    if plan.status in {"APPROVED", "PUBLISHED"}:
+        raise HTTPException(
+            status_code=409,
+            detail="Approved and published plans are locked. Optimise or select a COA to create a new draft.",
+        )
+    rows = body.as_dicts()
+    report = validate(_snapshot(db), rows)
     if not report["valid"]:
         message = report["violations"][0]["message"] if report["violations"] else "That edit is not valid."
         raise HTTPException(status_code=409, detail=message)
     db.execute(delete(AssignmentRow).where(AssignmentRow.plan_id == plan_id))
-    for row in body.assignments:
+    for row in rows:
         db.add(AssignmentRow(plan_id=plan_id, payload=row))
-    append_audit(db, actor=user.id, action="plan.edit", ref=plan_id, diff={"assignments": len(body.assignments)})
+    append_audit(db, actor=user.id, action="plan.edit", ref=plan_id, diff={"assignments": len(rows)})
     db.commit()
     return {"plan_id": plan_id, "valid": True}
 
@@ -465,23 +554,56 @@ def mission_why_not(mission_id: str, user: UserDep, db: Db) -> dict[str, Any]:
     return why_not(world, assignments, mission_id)
 
 
+@router.get("/fusion/snapshot")
+def fusion_snapshot(user: UserDep, db: Db) -> dict[str, Any]:
+    del user
+    snap = _snapshot(db)
+    return {
+        "theatre": snap.get("theatre"),
+        "seed": snap.get("seed"),
+        "fusion": snap.get("fusion"),
+        "sources": snap.get("sources"),
+    }
+
+
 @router.post("/events")
-def inject_event(body: EventBody, db: Db, user: User = Depends(need("events"))) -> dict[str, Any]:
+def inject_event(body: EventBody, db: Db, user: CsrfUser) -> dict[str, Any]:
+    from app.events_schema import EventIn
+
+    try:
+        parsed = EventIn(type=body.type, severity=body.severity, payload=body.payload, confidence=body.confidence)
+        payload = parsed.validated_payload()
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    kind = _normalize_event_type(body.type)
+    if user.role == "analyst":
+        if kind not in ANALYST_EVENTS:
+            raise HTTPException(status_code=403, detail="Analysts may only inject threat, airspace and weather picture events.")
+    elif user.role == "planner":
+        if kind in {"THREAT_UPDATE", "AIRSPACE_CHANGE"}:
+            raise HTTPException(status_code=403, detail="Threat and airspace updates are owned by the situation analyst.")
+    elif user.role not in {"commander", "admin"}:
+        raise HTTPException(status_code=403, detail="Your role cannot inject events.")
+    if kind == "BASE_STATUS" and body.type == "BASE_CLOSED" and "status" not in payload:
+        payload = {**payload, "status": "CLOSED"}
     world = read_world(db)
-    event_id = f"EVT-{datetime.now(UTC).strftime('%H%M%S%f')[:10]}"
-    event = {"id": event_id, "type": body.type, "severity": body.severity, "payload": body.payload, "confidence": body.confidence}
+    event_id = _next_event_id(db)
+    event = {"id": event_id, "type": kind, "severity": body.severity, "payload": payload, "confidence": body.confidence}
     updated = apply_event(world, event)
     write_world(db, updated)
+    fused = _snapshot(db)
     db.add(EventRow(
-        id=event_id, type=body.type, severity=body.severity, effective_at=world["now"], payload=body.payload,
+        id=event_id, type=body.type, severity=body.severity, effective_at=fused["now"], payload=body.payload,
         source=user.id, confidence=body.confidence, status="OPEN",
     ))
-    plan = db.scalar(select(PlanRow).order_by(PlanRow.version_no.desc()))
+    plan = db.scalar(select(PlanRow).where(PlanRow.status == "PUBLISHED").order_by(PlanRow.version_no.desc()))
+    if plan is None:
+        plan = db.scalar(select(PlanRow).order_by(PlanRow.version_no.desc()))
     assignments = []
     if plan is not None:
         assignments = [row.payload for row in db.scalars(select(AssignmentRow).where(AssignmentRow.plan_id == plan.id)).all()]
-    blast = impact(world, assignments, event)
-    options = courses_of_action(world, assignments, event, time_limit=2, seed=int(world["seed"]))
+    blast = impact(fused, assignments, event)
+    options = courses_of_action(fused, assignments, event, time_limit=2, seed=int(fused["seed"]))
     for index, option in enumerate(options, start=1):
         db.add(CoaRow(
             id=f"{event_id}-{option['id']}", event_id=event_id, preset=option["id"], metrics=option["metrics"],
@@ -491,6 +613,91 @@ def inject_event(body: EventBody, db: Db, user: User = Depends(need("events"))) 
     append_audit(db, actor=user.id, action="event.inject", ref=event_id, diff={"type": body.type})
     db.commit()
     return {"event_id": event_id, "impact": blast, "coas": [_coa_public(row) for row in options]}
+
+
+class MatrixWeights(BaseModel):
+    value: int = 50
+    stability: int = 50
+    risk: int = 50
+    reserve: int = 50
+    coas: list[dict[str, Any]] | None = None
+
+
+@router.post("/coas/rank")
+def rank_courses(body: MatrixWeights, user: UserDep, db: Db) -> dict[str, Any]:
+    del user
+    coas = body.coas
+    if not coas:
+        event = db.scalar(select(EventRow).order_by(EventRow.id.desc()))
+        if event is None:
+            return {"items": []}
+        rows = list(db.scalars(select(CoaRow).where(CoaRow.event_id == event.id)).all())
+        coas = [
+            {
+                "id": row.preset,
+                "name": row.preset,
+                "changes": len(row.diff or []),
+                "metrics": row.metrics,
+                "recommended": row.recommended,
+                "rationale": row.rationale,
+                "diff": row.diff,
+            }
+            for row in rows
+        ]
+    ranked = rank_coas(
+        coas,
+        value=body.value,
+        stability=body.stability,
+        risk=body.risk,
+        reserve=body.reserve,
+    )
+    return {"items": [_coa_public(row) for row in ranked]}
+
+
+@router.get("/command/glance")
+def command_glance(user: UserDep, db: Db) -> dict[str, Any]:
+    del user
+    world = _snapshot(db)
+    plan = db.scalar(select(PlanRow).where(PlanRow.status == "PUBLISHED").order_by(PlanRow.version_no.desc()))
+    if plan is None:
+        plan = db.scalar(select(PlanRow).order_by(PlanRow.version_no.desc()))
+    assignments: list[dict[str, Any]] = []
+    validation = {"valid": False, "violations": []}
+    if plan is not None:
+        assignments = [row.payload for row in db.scalars(select(AssignmentRow).where(AssignmentRow.plan_id == plan.id)).all()]
+        validation = validate(world, assignments)
+    event = db.scalar(select(EventRow).order_by(EventRow.id.desc()))
+    decision_required = event is not None and event.status == "OPEN"
+    aircraft = world["aircraft"]
+    crew = world["crew"]
+    fmc = sum(1 for row in aircraft if row.get("effective_status", row["status"]) == "FMC")
+    ready = sum(1 for row in crew if row["status"] == "AVAILABLE")
+    fresh = sum(1 for row in aircraft if row.get("freshness") == "FRESH")
+    latest_coas = []
+    impact_summary = None
+    if event is not None:
+        coa_rows = list(db.scalars(select(CoaRow).where(CoaRow.event_id == event.id)).all())
+        latest_coas = [{"id": r.preset, "recommended": r.recommended, "metrics": r.metrics} for r in coa_rows]
+        if assignments:
+            impact_summary = impact(world, assignments, {"type": event.type, "payload": event.payload})
+    return {
+        "plan": _plan_brief(plan) if plan else None,
+        "validation": validation,
+        "decision_required": decision_required,
+        "decision_state": "COMMAND DECISION REQUIRED" if decision_required else "NO DECISION REQUIRED",
+        "kpis": {
+            "mission_fulfilment": (plan.kpis or {}).get("value_weighted_fulfilment") if plan else None,
+            "p1_coverage": (plan.kpis or {}).get("p1_fulfilment") if plan else None,
+            "aircraft_fmc": f"{fmc} / {len(aircraft)}",
+            "crew_ready": f"{ready} / {len(crew)}",
+            "data_freshness": f"{fresh} / {len(aircraft)} FRESH",
+            "reserve_integrity": "OK" if validation.get("valid") else "Check plan",
+        },
+        "latest_event": {"id": event.id, "type": event.type} if event else None,
+        "impact": impact_summary,
+        "coa_count": len(latest_coas),
+        "retask_href": "/app/retask",
+    }
 
 
 @router.get("/events/latest")
@@ -519,7 +726,8 @@ def latest_event(user: UserDep, db: Db) -> dict[str, Any]:
 
 
 def _coa_public(row: dict[str, Any]) -> dict[str, Any]:
-    return {key: row[key] for key in ("id", "name", "recommended", "rationale", "changes", "metrics", "label", "diff")}
+    keys = ("id", "name", "recommended", "rationale", "changes", "metrics", "label", "diff", "matrix_score", "validation")
+    return {key: row[key] for key in keys if key in row}
 
 
 @router.post("/coas/{coa_id}/select")
@@ -528,11 +736,65 @@ def select_coa(coa_id: str, body: ReasonBody, db: Db, user: User = Depends(need(
     if coa is None:
         raise HTTPException(status_code=404, detail="That course of action is gone.")
     built = {"assignments": coa.assignments, "kpis": coa.metrics, "label": coa.rationale, "solver": {"status": "COA"}}
-    plan_id = _store_plan(db, user.id, built, status="PROPOSED")
+    plan_id = _store_plan(db, user.id, built, status="DRAFT")
     coa.plan_id = plan_id
+    event = db.get(EventRow, coa.event_id)
+    if event is not None:
+        event.status = "RESOLVED"
     append_audit(db, actor=user.id, action="coa.select", ref=coa_id, reason=body.reason, diff={"plan_id": plan_id})
     db.commit()
-    return {"plan_id": plan_id, "status": "PROPOSED"}
+    return {"plan_id": plan_id, "status": "DRAFT"}
+
+
+class MissionPatch(BaseModel):
+    priority: int | None = None
+    value: int | None = None
+    reason: str = ""
+
+
+@router.patch("/missions/{mission_id}")
+def patch_mission(
+    mission_id: str,
+    body: MissionPatch,
+    db: Db,
+    user: User = Depends(need("missions")),
+    if_match: str | None = Header(default=None),
+) -> dict[str, Any]:
+    row = db.get(MissionRow, mission_id)
+    if row is None:
+        raise HTTPException(status_code=404, detail="Mission not found.")
+    _version(if_match, row.version)
+    payload = dict(row.payload)
+    if body.priority is not None:
+        if body.priority < 1 or body.priority > 5:
+            raise HTTPException(status_code=422, detail="Priority must be 1–5.")
+        payload["priority"] = body.priority
+    if body.value is not None:
+        if body.value < 0:
+            raise HTTPException(status_code=422, detail="Value cannot be negative.")
+        payload["value"] = body.value
+    row.payload = payload
+    row.version += 1
+    append_audit(db, actor=user.id, action="mission.update", ref=mission_id, diff=body.model_dump(exclude_none=True), reason=body.reason)
+    db.commit()
+    return {"mission": payload, "version": row.version}
+
+
+@router.get("/system/health")
+def system_health(user: UserDep, db: Db) -> dict[str, Any]:
+    del user
+    snap = _snapshot(db)
+    fusion_meta = snap.get("fusion") or {}
+    audit = verify_chain(db)
+    return {
+        "api": "OK",
+        "db": "OK",
+        "solver": "READY",
+        "fusion": f"{fusion_meta.get('feeds_live', 0)}/{fusion_meta.get('feeds_total', 0)}",
+        "audit": "PASS" if audit.get("valid") else "FAIL",
+        "seed": snap.get("seed"),
+        "synthetic": True,
+    }
 
 
 @router.post("/fusion/{source_id}/degrade")
@@ -573,6 +835,33 @@ def _require_plan(db: Db, plan_id: str) -> PlanRow:
     if plan is None:
         raise HTTPException(status_code=404, detail="That plan is not on the board.")
     return plan
+
+
+@router.post("/missions/import")
+def import_missions(body: MissionImport, db: Db, user: User = Depends(need("missions"))) -> dict[str, Any]:
+    parsed, fatal = load_import_rows(body)
+    if fatal:
+        raise HTTPException(status_code=422, detail=fatal)
+    accepted = 0
+    rejected: list[dict[str, str]] = []
+    for row_id, mission, error in parsed:
+        if error or mission is None:
+            rejected.append({"row": row_id, "reason": error or "Rejected."})
+            continue
+        reason = rejection_reason(mission)
+        if reason:
+            rejected.append({"row": row_id, "reason": reason})
+            continue
+        row = db.get(MissionRow, str(mission["id"]))
+        if row is None:
+            db.add(MissionRow(id=str(mission["id"]), payload=mission, version=1))
+        else:
+            row.payload = mission
+            row.version += 1
+        accepted += 1
+    append_audit(db, actor=user.id, action="mission.import", ref="missions", diff={"accepted": accepted, "rejected": len(rejected)})
+    db.commit()
+    return {"accepted": accepted, "rejected": rejected}
 
 
 @router.get("/missions/{mission_id}")

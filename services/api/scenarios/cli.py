@@ -42,7 +42,7 @@ def seed(pack: str = "S1", seed_value: int = 26250, scale: str = "M") -> None:
         raise RuntimeError("Database is not configured.")
     db = database.SessionLocal()
     world = generate_world(seed_value, pack, scale)
-    write_world(db, world)
+    write_world(db, world, reset_operational=True)
     seed_conflicts(db, str(world["epoch"]))
     password = hash_password(settings.demo_password)
     for user_id, email, role, name in USERS:

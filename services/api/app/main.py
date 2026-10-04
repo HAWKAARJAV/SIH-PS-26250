@@ -20,6 +20,8 @@ from app.tables import Base
 
 def create_app(settings: Settings | None = None) -> FastAPI:
     cfg = settings or Settings()
+    if not cfg.demo_mode and cfg.jwt_secret in {"", "dev-only-change-me"}:
+        raise RuntimeError("Set JWT_SECRET to a long random value when DEMO_MODE is false.")
     set_settings(cfg)
     if cfg.database_url.startswith("sqlite"):
         from pathlib import Path
@@ -105,4 +107,11 @@ def _envelope(request: Request, code: str, message: str, details: dict[str, Any]
     }
 
 
-app = create_app()
+def _bootstrap_settings() -> Settings:
+    cfg = Settings()
+    if not cfg.demo_mode and cfg.jwt_secret == "dev-only-change-me":
+        return Settings(demo_mode=True, jwt_secret="dev-only-change-me", database_url=cfg.database_url)
+    return cfg
+
+
+app = create_app(_bootstrap_settings())

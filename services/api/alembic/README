@@ -1,0 +1,17 @@
+Single-database migrations for the VYUHA API.
+
+From `services/api`:
+
+```
+uv run alembic upgrade head
+```
+
+`DATABASE_URL` overrides the placeholder in `alembic.ini` (default `sqlite:///./data/vyuha.db`). Point it at Postgres when you have one. Generate SQL without a database with `uv run alembic upgrade head --sql`.
+
+The running app and the pytest seed path still call `Base.metadata.create_all`. They do not run Alembic. On a database that was already created that way, stamp the revision instead of upgrading:
+
+```
+uv run alembic stamp head
+```
+
+`upgrade head` on that database fails because the tables already exist.

@@ -26,9 +26,16 @@ from app.tables import (
 )
 
 
+def clear_operational_plans(db: Session) -> None:
+    """Remove plans and retask artefacts. Used only for scenario load/reset/seed."""
+    from app.tables import AckRow, CoaRow, DecisionRow, EventRow, PlanRow
+
+    for model in (AckRow, CoaRow, DecisionRow, AssignmentRow, PlanRow, EventRow):
+        db.execute(delete(model))
+
+
 def clear_theatre(db: Session) -> None:
     for model in (
-        AssignmentRow,
         MissionRow,
         AircraftRow,
         CrewRow,
@@ -45,7 +52,9 @@ def clear_theatre(db: Session) -> None:
         db.execute(delete(model))
 
 
-def write_world(db: Session, world: dict[str, Any]) -> None:
+def write_world(db: Session, world: dict[str, Any], *, reset_operational: bool = False) -> None:
+    if reset_operational:
+        clear_operational_plans(db)
     clear_theatre(db)
     db.flush()
     for base in world["bases"]:

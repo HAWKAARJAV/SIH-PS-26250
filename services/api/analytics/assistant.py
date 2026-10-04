@@ -13,7 +13,7 @@ def answer(snapshot: dict[str, Any], text: str) -> dict[str, Any]:
     lowered = query.lower()
     mission = _id(query, "MSN")
     tail = _id(query, "TAIL")
-    if mission and "why" in lowered or lowered.startswith("explain"):
+    if mission and ("why" in lowered or lowered.startswith("explain")):
         return {"intent": "explain_mission", "mission_id": mission, "freshness": _fresh(snapshot)}
     if "duty" in lowered or "fatigue" in lowered:
         hot = sorted(snapshot["crew"], key=lambda row: float(row["fatigue_index"]), reverse=True)[:5]

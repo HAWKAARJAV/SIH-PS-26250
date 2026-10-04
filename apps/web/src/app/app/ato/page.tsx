@@ -1,24 +1,43 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { EmptyState, ErrorState, LoadingState, StatusBadge } from "@/components/states";
 import { api } from "@/lib/api";
 
 type Plan = { id: string; status: string; digest: string };
 type Ato = { plan: Plan; lines: { mission: string; call_sign: string; type: string; tail: string; start_dtg: string; load_out: string }[]; acks: { unit: string; state: string }[] };
+type Diff = { summary: string; hard_violations: number };
 
 export default function AtoPage() {
   const [plans, setPlans] = useState<Plan[]>([]);
   const [doc, setDoc] = useState<Ato | null>(null);
+  const [diff, setDiff] = useState<Diff | null>(null);
+  const [role, setRole] = useState("");
   const [error, setError] = useState("");
   const [note, setNote] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [docError, setDocError] = useState("");
 
   useEffect(() => {
-    api<{ items: Plan[] }>("/api/v1/plans").then((data) => setPlans(data.items)).catch((err: unknown) => setError(err instanceof Error ? err.message : "No plans."));
+    api<{ role: string }>("/api/v1/auth/me").then((me) => setRole(me.role)).catch(() => setRole(""));
+    api<{ items: Plan[] }>("/api/v1/plans")
+      .then((data) => setPlans(data.items))
+      .catch((err: unknown) => setError(err instanceof Error ? err.message : "Plans did not load."))
+      .finally(() => setLoading(false));
   }, []);
 
   async function open(id: string) {
-    setDoc(await api<Ato>(`/api/v1/plans/${id}/ato`));
+    setDocError("");
+    try {
+      setDoc(await api<Ato>(`/api/v1/plans/${id}/ato`));
+      setDiff(await api<Diff>(`/api/v1/plans/${id}/ato-diff`));
+    } catch (err) {
+      setDoc(null);
+      setDiff(null);
+      setDocError(err instanceof Error ? err.message : "That ATO did not open.");
+    }
   }
+
   async function pdf(id: string) {
     setError("");
     try {
@@ -35,7 +54,7 @@ export default function AtoPage() {
     }
   }
 
-  async function act(id: string, action: "submit" | "approve" | "co-approve" | "publish") {
+  async function act(id: string, action: "submit" | "approve" | "co-approve" | "publish" | "reject") {
     setError("");
     try {
       const path = action === "co-approve" ? `/api/v1/plans/${id}/co-approve` : `/api/v1/plans/${id}/${action}`;
@@ -48,27 +67,49 @@ export default function AtoPage() {
     }
   }
 
+  const canSubmit = role === "planner";
+  const canApprove = role === "commander";
+  const canCoSign = role === "auditor";
+  const canPublish = role === "commander";
+
   return (
     <section>
       <h1 className="font-display text-4xl">ATO / ACO</h1>
-      {error && <p className="mt-3 text-brick" role="alert">{error}</p>}
+      <p className="mt-1 text-sm text-ink-3">Lifecycle actions are role-gated on the server.</p>
+      {loading && <LoadingState label="Loading air tasking orders…" />}
+      {error && <ErrorState message={error} />}
+      {docError && <ErrorState message={docError} />}
       {note && <p className="mt-3 text-moss">{note}</p>}
       <ul className="mt-4 grid gap-2">
         {plans.map((plan) => (
           <li key={plan.id} className="flex flex-wrap items-center gap-2 rounded-lg border border-line bg-surface px-3 py-2">
             <span className="font-mono">{plan.id}</span>
-            <span>{plan.status}</span>
+            <StatusBadge tone={plan.status === "PUBLISHED" ? "ok" : plan.status === "DRAFT" ? "neutral" : "info"}>{plan.status}</StatusBadge>
             <span className="font-mono text-xs text-ink-3">{plan.digest.slice(0, 12)}</span>
             <button type="button" className="text-sm text-vyom" onClick={() => void open(plan.id)}>View</button>
-            <button type="button" className="text-sm" onClick={() => void act(plan.id, "submit")}>Submit</button>
-            <button type="button" className="text-sm" onClick={() => void act(plan.id, "approve")}>Approve</button>
-            <button type="button" className="text-sm" onClick={() => void act(plan.id, "co-approve")}>Co-sign</button>
-            <button type="button" className="text-sm" onClick={() => void act(plan.id, "publish")}>Publish</button>
+            {canSubmit && plan.status === "DRAFT" && (
+              <button type="button" className="text-sm" onClick={() => void act(plan.id, "submit")}>Submit</button>
+            )}
+            {canApprove && plan.status === "PROPOSED" && (
+              <>
+                <button type="button" className="text-sm" onClick={() => void act(plan.id, "approve")}>Approve</button>
+                <button type="button" className="text-sm" onClick={() => void act(plan.id, "reject")}>Reject</button>
+              </>
+            )}
+            {canCoSign && plan.status === "APPROVED" && (
+              <button type="button" className="text-sm" onClick={() => void act(plan.id, "co-approve")}>Co-sign</button>
+            )}
+            {canPublish && plan.status === "APPROVED" && (
+              <button type="button" className="text-sm" onClick={() => void act(plan.id, "publish")}>Publish</button>
+            )}
             <button type="button" className="text-sm" onClick={() => void pdf(plan.id)}>PDF</button>
           </li>
         ))}
       </ul>
-      {!plans.length && !error && <p className="mt-6 text-ink-3">No ATO yet. The planner has to optimise first.</p>}
+      {!loading && !plans.length && !error && (
+        <EmptyState title="No ATO yet" detail="The planner has to optimise first." />
+      )}
+      {diff && <p className="mt-4 rounded-lg bg-surface-2 px-3 py-2 font-mono text-sm">ATO diff: {diff.summary} · validator hard violations {diff.hard_violations}</p>}
       {doc && (
         <table className="mt-6 w-full text-left text-sm">
           <thead><tr><th>Mission</th><th>Call-sign</th><th>Type</th><th>Tail</th><th>DTG</th><th>Load-out</th></tr></thead>

@@ -13,6 +13,25 @@
 | `pnpm build` | OK (routes now dynamic `ƒ`) |
 | Docker CLI | Not installed on this Mac |
 
+## Phase 0 / Phase 1 slice (2026-10-04)
+
+| Check | Result |
+|---|---|
+| `uv run pytest` | **14 passed** (incl. `test_regressions`: C1 plan preserved on event, C2 M/26250 solver→validator, C4 publish locks) |
+| Recreated `services/api/.venv` | Broken shebang pointed at old path `sih 2k26 ps 2` |
+
+**Fixed:** C1 event wipe (`world.write_world` + `inject_event` fused snapshot); C2 launch/recovery CP-SAT bins; C4 partial lifecycle (lock APPROVED/PUBLISHED edits, re-validate submit/approve/publish, digest at publish); KPI `hard_violations` from validator; retask baseline prefers PUBLISHED plan.
+
+**Features added (SIH demo path):** `/command/glance` (decision banner, validator, KPIs); `/coas/rank` (backend decision matrix); retask COA presets with per-preset freeze + parallel solve + stability metrics; Command glance + Retask console + Judge mode UI wired; root `README.md`.
+
+**Phase 1–2 bulk (2026-10-04 evening):** `fusion.snapshot.fuse` authoritative path; event validation + monotonic IDs; RBAC on inject; audit hash includes timestamp (legacy verify); `GET /fusion/snapshot`; clock GET non-mutating; COA→DRAFT; SW only caches static; planner Validate/Submit; `docs/DEMO_SCRIPT.md`, `docs/ARCHITECTURE.md`; Playwright judge journey spec; `demo_mode` default false (use `.env`).
+
+**2026-10-04 late:** 21 pytest (contract smoke, Hypothesis×25, COA≥2 on M/26250); endpoints doc `docs/ENDPOINTS.md`; reject/ato-diff/mission patch/system health; typed assignments; SIH/SECURITY/DATA_MODEL/BENCHMARKS docs.
+
+**2026-10-04 close-out:** 23 pytest including 200 small-world greedy→validator, RBAC matrix, mission JSON import, reserve-release COA preset, login rate limit, admin scenario page, seven-domain landing, model cards. **23 passed.**
+
+**Not 100% of the written master prompt:** no 30-seed M/L benchmark charts, no CSV import, no Alembic-applied migrations, Docker not run on this machine, Playwright judge journey not executed in this session, design system not fully componentised, Weibull/LightGBM serviceability not rebuilt. Those remain documented limitations, not hidden features.
+
 ## R0 (in progress)
 
 - Production CSP: root layout `force-dynamic` + `connection()`; Playwright CSP e2e passes on `pnpm build` + `pnpm start` with API.

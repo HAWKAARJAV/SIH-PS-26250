@@ -5,6 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { brand } from "@/config/brand";
 import { api, setCsrf, type Me } from "@/lib/api";
+import { clockLine } from "@/lib/dtg";
 
 const NAV = [
   { href: "/app", label: "Dashboard", group: "Command" },
@@ -19,6 +20,8 @@ const NAV = [
   { href: "/app/fusion", label: "COP Health", group: "Intelligence" },
   { href: "/app/map", label: "Map", group: "Intelligence" },
   { href: "/app/audit", label: "Audit", group: "Governance" },
+  { href: "/app/judge", label: "Judge mode", group: "Governance" },
+  { href: "/app/admin", label: "Admin", group: "Governance" },
   { href: "/app/analytics", label: "Forecasts", group: "Intelligence" },
 ];
 
@@ -26,8 +29,11 @@ export function Shell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
   const [me, setMe] = useState<Me | null>(null);
-  const [clock, setClock] = useState<string>("");
+  const [clock, setClock] = useState<{ pack: string; dtg: string; seed: number } | null>(null);
+  const [zone, setZone] = useState<"Z" | "IST">("Z");
+  const [health, setHealth] = useState<string>("");
   const [error, setError] = useState("");
+  const showAdmin = me?.role === "admin" || me?.role === "commander";
 
   useEffect(() => {
     api<Me>("/api/v1/auth/me")
@@ -37,8 +43,11 @@ export function Shell({ children }: { children: React.ReactNode }) {
       })
       .catch(() => router.replace("/login"));
     api<{ dtg: string; pack: string; seed: number }>("/api/v1/clock")
-      .then((row) => setClock(`${row.pack} · ${row.dtg} · seed ${row.seed}`))
+      .then((row) => setClock({ pack: row.pack, dtg: row.dtg, seed: row.seed }))
       .catch((err: unknown) => setError(err instanceof Error ? err.message : "Clock unavailable."));
+    api<{ api: string; db: string; solver: string; fusion: string; audit: string }>("/api/v1/system/health")
+      .then((row) => setHealth(`API ${row.api} · DB ${row.db} · SOLVER ${row.solver} · FUSION ${row.fusion} · AUDIT ${row.audit}`))
+      .catch(() => setHealth(""));
     if ("serviceWorker" in navigator) {
       navigator.serviceWorker.register("/sw.js").catch(() => undefined);
     }
@@ -54,7 +63,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
             {["Command", "Plan", "Resources", "Intelligence", "Governance"].map((group) => (
               <div key={group}>
                 <p className="mb-1 text-xs uppercase tracking-wide text-ink-3">{group}</p>
-                {NAV.filter((item) => item.group === group).map((item) => (
+                {NAV.filter((item) => item.group === group && (item.href !== "/app/admin" || showAdmin)).map((item) => (
                   <Link
                     key={item.href}
                     href={item.href}
@@ -69,8 +78,40 @@ export function Shell({ children }: { children: React.ReactNode }) {
         </aside>
         <div className="min-w-0 flex-1">
           <header className="flex h-14 items-center justify-between border-b border-line px-4">
-            <p className="font-mono text-ink-2">{clock || "Loading the clock…"}</p>
-            <p className="text-sm">{me ? me.display_name : "…"}</p>
+            <div className="font-mono text-xs text-ink-2 md:text-sm">
+              <p>{clock ? clockLine(clock.pack, clock.dtg, clock.seed, zone) : "Loading the clock…"}</p>
+              {health && <p className="text-ink-3">{health}</p>}
+            </div>
+            <div className="flex items-center rounded-lg border border-line" role="group" aria-label="Clock zone">
+              <button
+                className={`px-2 py-1 text-xs ${zone === "Z" ? "bg-ember-tint text-ember" : "text-ink-2"}`}
+                type="button"
+                aria-pressed={zone === "Z"}
+                onClick={() => setZone("Z")}
+              >
+                Zulu
+              </button>
+              <button
+                className={`px-2 py-1 text-xs ${zone === "IST" ? "bg-ember-tint text-ember" : "text-ink-2"}`}
+                type="button"
+                aria-pressed={zone === "IST"}
+                onClick={() => setZone("IST")}
+              >
+                IST
+              </button>
+            </div>
+            <div className="flex items-center gap-2">
+              {(me?.role === "commander" || me?.role === "admin") && (
+                <button
+                  className="rounded border border-line px-2 py-1 text-xs"
+                  type="button"
+                  onClick={() => void api("/api/v1/clock", { method: "POST", body: JSON.stringify({ status: "RUNNING", rate: 10 }) })}
+                >
+                  Sim 10×
+                </button>
+              )}
+              <p className="text-sm">{me ? `${me.display_name}` : "…"}</p>
+            </div>
           </header>
           <div className="h-0.5 bg-gradient-to-r from-ember to-canvas" />
           <div className="mx-auto max-w-[1480px] p-4 md:p-6">

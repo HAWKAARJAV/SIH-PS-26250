@@ -9,10 +9,22 @@ type Monte = { runs: number; valid_runs: number; served_min: number; served_max:
 export default function AnalyticsPage() {
   const [card, setCard] = useState<Card | null>(null);
   const [monte, setMonte] = useState<Monte | null>(null);
+  const [bench, setBench] = useState<string>("");
   const [error, setError] = useState("");
 
   useEffect(() => {
     api<Card>("/api/v1/forecast/serviceability").then(setCard).catch(() => setCard(null));
+    api<{ runs?: number; scale?: string; seeds?: number[]; solver_beats_or_ties_greedy?: number }>("/api/v1/benchmark")
+      .then((data) => {
+        if (!data.runs) {
+          setBench("Run pnpm benchmark to generate docs/benchmarks/latest.json");
+          return;
+        }
+        setBench(
+          `SIMULATED BENCHMARK · scale ${data.scale} · seeds ${data.seeds?.join(", ")} · solver beat/tie greedy ${data.solver_beats_or_ties_greedy}/${data.runs}`,
+        );
+      })
+      .catch(() => setBench(""));
   }, []);
 
   async function train() {
@@ -47,6 +59,12 @@ export default function AnalyticsPage() {
         )}
         <button className="mt-3 rounded-lg border border-line px-3 py-2" type="button" onClick={() => void train()}>Train on the seeded fleet</button>
       </article>
+      {bench && (
+        <article className="mt-4 rounded-xl border border-line bg-surface p-4">
+          <h2 className="font-display text-2xl">Benchmark</h2>
+          <p className="mt-2 font-mono text-sm">{bench}</p>
+        </article>
+      )}
       <article className="mt-4 rounded-xl border border-line bg-surface p-4">
         <h2 className="font-display text-2xl">Monte Carlo</h2>
         {monte && <p className="mt-2">Seed {monte.seed}. {monte.valid_runs} of {monte.runs} runs stayed valid. Missions served {monte.served_min} to {monte.served_max}, mean {monte.served_mean}. {monte.note}</p>}

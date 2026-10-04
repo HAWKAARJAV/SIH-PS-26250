@@ -15,6 +15,18 @@ from app.security import ACCESS_COOKIE, REFRESH_COOKIE, as_utc, encode_access, h
 from app.tables import SessionRow, User
 
 router = APIRouter(prefix="/api/v1/auth", tags=["auth"])
+_LOGIN_HITS: dict[str, list[float]] = {}
+
+
+def _rate_limit(key: str, limit: int = 20, window_s: float = 60) -> None:
+    import time
+
+    now = time.time()
+    hits = [stamp for stamp in _LOGIN_HITS.get(key, []) if now - stamp < window_s]
+    if len(hits) >= limit:
+        raise HTTPException(status_code=429, detail="Too many sign-in attempts. Wait a minute and try again.")
+    hits.append(now)
+    _LOGIN_HITS[key] = hits
 
 
 class LoginBody(BaseModel):
@@ -85,7 +97,9 @@ def auth_config(settings: Cfg) -> dict[str, bool]:
 
 
 @router.post("/login")
-def login(body: LoginBody, db: Db, settings: Cfg, response: Response) -> dict[str, object]:
+def login(body: LoginBody, request: Request, db: Db, settings: Cfg, response: Response) -> dict[str, object]:
+    client = request.client.host if request.client else "local"
+    _rate_limit(f"login:{client}")
     user = db.scalar(select(User).where(User.email == body.email.strip().lower()))
     now = datetime.now(UTC)
     if user and user.locked_until and as_utc(user.locked_until) > now:

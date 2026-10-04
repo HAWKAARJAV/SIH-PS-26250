@@ -9,7 +9,7 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
     database_url: str = "sqlite:///./data/vyuha.db"
-    demo_mode: bool = True
+    demo_mode: bool = False
     jwt_secret: str = "dev-only-change-me"
     access_ttl_min: int = 15
     refresh_ttl_days: int = 7

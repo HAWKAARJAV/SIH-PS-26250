@@ -10,6 +10,19 @@ from sqlalchemy.orm import Session
 from app.tables import SimState
 
 
+def projected_sim_now(sim: SimState) -> str:
+    if sim.status != "RUNNING" or not sim.wall_anchor:
+        return sim.sim_now
+    now = datetime.now(UTC)
+    anchor = parse_iso(sim.wall_anchor)
+    if anchor.tzinfo is None:
+        anchor = anchor.replace(tzinfo=UTC)
+    minutes = (now - anchor).total_seconds() / 60.0 * max(sim.rate, 1)
+    if minutes < 0.05:
+        return sim.sim_now
+    return to_iso(add_minutes(parse_iso(sim.sim_now), int(round(minutes))))
+
+
 def tick(sim: SimState, db: Session) -> None:
     if sim.status != "RUNNING":
         return

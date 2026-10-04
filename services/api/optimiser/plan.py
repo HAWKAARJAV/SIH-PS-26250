@@ -51,6 +51,7 @@ def build_plan(
 
 
 def score(snapshot: dict[str, Any], assignments: list[dict[str, Any]]) -> dict[str, float]:
+    validation = validate(snapshot, assignments)
     served_ids = {row["mission_id"] for row in assignments}
     possible = 0
     got = 0
@@ -70,5 +71,5 @@ def score(snapshot: dict[str, Any], assignments: list[dict[str, Any]]) -> dict[s
         "p1_fulfilment": round(p1_got / p1_total, 4) if p1_total else 1.0,
         "missions_served": len(served_ids),
         "missions_total": len(snapshot["missions"]),
-        "hard_violations": 0,
+        "hard_violations": len(validation["violations"]),
     }
