@@ -127,7 +127,7 @@ export default function AtoPage() {
       {note && <p className="mt-3 text-moss">{note}</p>}
       <ul className="mt-4 grid gap-2">
         {plans.map((plan) => (
-          <li key={plan.id} className="rounded-lg border border-line bg-surface px-3 py-3">
+          <li key={plan.id} className="rounded-2xl border border-line bg-surface px-4 py-4 shadow-[var(--shadow-1)]">
             <div className="flex flex-wrap items-center gap-2">
               <span className="font-mono">{plan.id}</span>
               <StatusBadge tone={plan.status === "PUBLISHED" ? "ok" : plan.status === "DRAFT" ? "neutral" : "info"}>{plan.status}</StatusBadge>

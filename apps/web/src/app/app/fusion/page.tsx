@@ -70,7 +70,7 @@ export default function FusionPage() {
         {sources.map((source) => {
           const stale = isStale(source);
           return (
-            <li key={source.id} className="flex items-center justify-between gap-3 rounded-xl border border-line bg-surface p-4">
+            <li key={source.id} className="flex items-center justify-between gap-3 rounded-2xl border border-line bg-surface p-4 shadow-[var(--shadow-1)]">
               <div>
                 <p className="font-mono">{source.id}</p>
                 <p className="text-sm text-ink-2">{source.name}</p>

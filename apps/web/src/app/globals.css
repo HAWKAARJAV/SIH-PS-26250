@@ -30,19 +30,83 @@
   --font-display: "Fraunces Variable", "Fraunces", serif;
   --font-sans: "Geist", "Noto Sans Devanagari", sans-serif;
   --font-mono: "Geist Mono", ui-monospace, monospace;
-  --shadow-1: 0 1px 0 rgba(42, 33, 24, 0.04), 0 1px 2px rgba(42, 33, 24, 0.06);
-  --shadow-2: 0 2px 4px rgba(42, 33, 24, 0.05), 0 12px 28px -8px rgba(42, 33, 24, 0.12);
-  --radius-card: 12px;
-  --radius-panel: 16px;
+  --shadow-1: 0 1px 0 rgba(42, 33, 24, 0.04), 0 1px 2px rgba(42, 33, 24, 0.05);
+  --shadow-2: 0 1px 2px rgba(42, 33, 24, 0.04), 0 18px 40px -18px rgba(42, 33, 24, 0.18);
+  --radius-card: 14px;
+  --radius-panel: 18px;
 }
 
 :root { color-scheme: light; }
 html, body { background: var(--color-canvas); color: var(--color-ink); }
-body { font-family: var(--font-sans); font-size: 16px; line-height: 24px; }
-.font-display { font-family: var(--font-display); }
+body {
+  font-family: var(--font-sans);
+  font-size: 16px;
+  line-height: 24px;
+  background-image:
+    radial-gradient(1200px 480px at 8% -10%, rgba(185, 70, 27, 0.06), transparent 55%),
+    radial-gradient(900px 420px at 100% 0%, rgba(54, 92, 135, 0.07), transparent 50%);
+  background-attachment: fixed;
+}
+.font-display { font-family: var(--font-display); font-optical-sizing: auto; letter-spacing: -0.02em; }
+h1.font-display { letter-spacing: -0.035em; line-height: 1.05; font-weight: 520; }
 .font-mono, .tabular { font-variant-numeric: tabular-nums lining-nums; }
 .font-mono { font-family: var(--font-mono); font-size: 12.5px; line-height: 18px; }
 :focus-visible { outline: 2px solid var(--color-ember); outline-offset: 2px; }
+button, a, summary, input, select { transition: background-color 180ms ease, color 180ms ease, border-color 180ms ease, box-shadow 180ms ease; }
+button { cursor: pointer; }
+button:disabled { cursor: not-allowed; }
+input:not([type="range"]):focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  border-color: var(--color-ember);
+  box-shadow: 0 0 0 3px var(--color-ember-tint);
+}
+input[type="range"] {
+  accent-color: var(--color-ember);
+  height: 1.25rem;
+}
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }
+}
+
+.theatre-chart .maplibregl-ctrl-group {
+  overflow: hidden;
+  border: 1px solid var(--color-line);
+  border-radius: 12px;
+  background: var(--color-surface);
+  box-shadow: var(--shadow-1);
+}
+.theatre-chart .maplibregl-ctrl-group button {
+  width: 32px;
+  height: 32px;
+}
+.theatre-chart .maplibregl-ctrl-group button + button {
+  border-top-color: var(--color-line);
+}
+.theatre-chart .maplibregl-ctrl-scale {
+  border-color: var(--color-line-strong);
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--color-surface) 92%, transparent);
+  color: var(--color-ink-2);
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+.chart-place {
+  font-family: var(--font-display);
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  pointer-events: none;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.chart-id {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  pointer-events: none;
+  text-shadow: 0 0 3px #fffdf9, 0 0 3px #fffdf9;
+  white-space: nowrap;
+}
+.theatre-base[data-on="true"] > span:first-child {
+  box-shadow: 0 0 0 2px var(--color-ember);
 }

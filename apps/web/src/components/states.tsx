@@ -9,32 +9,35 @@ const TONES = {
 } as const;
 
 export function StatusBadge({ tone, children }: { tone: keyof typeof TONES; children: ReactNode }) {
-  return <span className={`inline-flex rounded-full px-2 py-0.5 text-xs ${TONES[tone]}`}>{children}</span>;
+  return <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium tracking-wide ${TONES[tone]}`}>{children}</span>;
 }
 
 export function LoadingState({ label }: { label: string }) {
   return (
-    <p className="mt-6 text-sm text-ink-3" role="status">
-      {label}
-    </p>
+    <div className="mt-6" role="status">
+      <div className="h-1 w-40 overflow-hidden rounded-full bg-surface-2">
+        <div className="h-full w-1/2 animate-pulse rounded-full bg-ember/70" />
+      </div>
+      <p className="mt-3 text-sm text-ink-3">{label}</p>
+    </div>
   );
 }
 
 export function EmptyState({ title, detail }: { title: string; detail?: string }) {
   return (
-    <div className="mt-6 rounded-xl border border-dashed border-line bg-surface px-4 py-8 text-center" role="status">
-      <p className="font-display text-xl">{title}</p>
-      {detail && <p className="mt-2 text-sm text-ink-3">{detail}</p>}
+    <div className="mt-6 rounded-2xl border border-dashed border-line-strong bg-surface/80 px-6 py-10 text-center" role="status">
+      <p className="font-display text-2xl">{title}</p>
+      {detail && <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-ink-3">{detail}</p>}
     </div>
   );
 }
 
 export function ErrorState({ message, onRetry }: { message: string; onRetry?: () => void }) {
   return (
-    <div className="mt-4 rounded-xl border border-brick bg-brick-tint px-4 py-3" role="alert">
+    <div className="mt-4 rounded-2xl border border-brick/30 bg-brick-tint px-4 py-3" role="alert">
       <p className="text-sm text-brick">{message}</p>
       {onRetry && (
-        <button className="mt-2 rounded-lg border border-line-strong bg-surface px-3 py-1 text-sm text-ink" type="button" onClick={onRetry}>
+        <button className="mt-2 rounded-lg border border-line-strong bg-surface px-3 py-1.5 text-sm text-ink hover:bg-surface-2" type="button" onClick={onRetry}>
           Try again
         </button>
       )}

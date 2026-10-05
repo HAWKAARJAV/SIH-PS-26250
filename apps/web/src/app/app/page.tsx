@@ -115,27 +115,30 @@ export default function DashboardPage() {
       {!loading && !error && !glance && <EmptyState title="No snapshot yet" detail="The command glance returned nothing." />}
       {glance && (
         <div
-          className={`mt-4 rounded-xl border px-4 py-3 ${glance.decision_required ? "border-brick bg-brick-tint" : "border-moss bg-moss-tint"}`}
+          className={`mt-2 flex flex-wrap items-end justify-between gap-4 rounded-2xl border px-5 py-5 shadow-[var(--shadow-1)] ${glance.decision_required ? "border-brick/30 bg-brick-tint" : "border-moss/30 bg-moss-tint"}`}
         >
-          <p className="flex flex-wrap items-center gap-2 font-display text-lg">
-            {glance.decision_state}
-            <StatusBadge tone={glance.decision_required ? "bad" : "ok"}>
-              {glance.decision_required ? "Decision required" : "Holding"}
-            </StatusBadge>
-          </p>
-          {glance.decision_required && glance.impact?.summary && (
-            <p className="mt-1 text-sm text-ink-2">
-              {glance.impact.summary}
-              {glance.coa_count > 0 ? ` · ${glance.coa_count} courses of action on the server` : ""}
+          <div>
+            <p className="text-[11px] font-medium uppercase tracking-[0.16em] text-ink-3">Decision</p>
+            <p className="mt-1 flex flex-wrap items-center gap-2 font-display text-3xl">
+              {glance.decision_state}
+              <StatusBadge tone={glance.decision_required ? "bad" : "ok"}>
+                {glance.decision_required ? "Decision required" : "Holding"}
+              </StatusBadge>
             </p>
-          )}
-          <p className="mt-2 text-sm text-ink-2">
-            {glance.decision_required
-              ? "Next: open the retask console, read the blast radius, and select a course of action. That creates a draft for the commander."
-              : "Next: open the planner. An ops planner presses Optimise the flying day, then Check this plan, then Submit for commander approval."}
-          </p>
+            {glance.decision_required && glance.impact?.summary && (
+              <p className="mt-2 text-sm text-ink-2">
+                {glance.impact.summary}
+                {glance.coa_count > 0 ? ` · ${glance.coa_count} courses of action on the server` : ""}
+              </p>
+            )}
+            <p className="mt-2 max-w-2xl text-sm leading-6 text-ink-2">
+              {glance.decision_required
+                ? "Next: open the retask console, read the blast radius, and select a course of action. That creates a draft for the commander."
+                : "Next: open the planner. An ops planner presses Optimise the flying day, then Check this plan, then Submit for commander approval."}
+            </p>
+          </div>
           <Link
-            className="mt-3 inline-flex cursor-pointer rounded-lg bg-ember px-4 py-3 text-sm font-medium text-surface hover:bg-ember-hover"
+            className="rounded-full bg-ember px-5 py-2.5 text-sm font-medium text-surface hover:bg-ember-hover"
             href={glance.decision_required ? "/app/retask" : "/app/plan"}
           >
             {glance.decision_required ? "Open retask console" : "Open planner"}
@@ -143,34 +146,37 @@ export default function DashboardPage() {
         </div>
       )}
       {glance && (
-      <div className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         {tiles.map((tile) => (
-          <article key={tile.label} className="rounded-xl border border-line bg-surface p-4 shadow-[var(--shadow-1)]">
-            <p className="text-xs uppercase tracking-wide text-ink-3">{tile.label}</p>
-            <p className="mt-2 font-mono text-lg text-ink">{tile.value}</p>
-            <p className="mt-2 text-sm text-ink-2">{tile.meaning}</p>
+          <article key={tile.label} className="rounded-2xl border border-line bg-surface px-4 py-4 shadow-[var(--shadow-1)]">
+            <p className="text-[11px] font-medium uppercase tracking-[0.12em] text-ink-3">{tile.label}</p>
+            <p className="mt-2 font-display text-2xl leading-tight text-ink">{tile.value}</p>
+            <p className="mt-2 text-xs leading-5 text-ink-3">{tile.meaning}</p>
             {tile.label === "Plan validator" && (
-              <StatusBadge tone={!glance.plan ? "neutral" : glance.validation.valid ? "ok" : "warn"}>
-                {!glance.plan ? "No plan" : glance.validation.valid ? "PASS" : "Check"}
-              </StatusBadge>
+              <div className="mt-3">
+                <StatusBadge tone={!glance.plan ? "neutral" : glance.validation.valid ? "ok" : "warn"}>
+                  {!glance.plan ? "No plan" : glance.validation.valid ? "PASS" : "Check"}
+                </StatusBadge>
+              </div>
             )}
-            {tile.label === "Plan status" && glance.plan && <StatusBadge tone="info">{glance.plan.status}</StatusBadge>}
+            {tile.label === "Plan status" && glance.plan && (
+              <div className="mt-3">
+                <StatusBadge tone="info">{glance.plan.status}</StatusBadge>
+              </div>
+            )}
           </article>
         ))}
       </div>
       )}
-      <div className="mt-8 flex flex-wrap gap-3">
-        <Link className="inline-flex cursor-pointer flex-col rounded-lg bg-ember px-4 py-3 text-sm font-medium text-surface hover:bg-ember-hover" href="/app/plan">
-          Open planner
-          <span className="mt-1 text-xs font-normal">Destination: planner</span>
+      <div className="mt-6 flex flex-wrap gap-2">
+        <Link className="rounded-full border border-line bg-surface px-4 py-2 text-sm text-ink-2 hover:border-line-strong hover:text-ink" href="/app/plan">
+          Planner
         </Link>
-        <Link className="inline-flex cursor-pointer flex-col rounded-lg border border-line-strong bg-surface px-4 py-3 text-sm font-medium hover:bg-surface-2" href="/app/retask">
-          Retask console
-          <span className="mt-1 text-xs font-normal text-ink-2">Destination: retask</span>
+        <Link className="rounded-full border border-line bg-surface px-4 py-2 text-sm text-ink-2 hover:border-line-strong hover:text-ink" href="/app/retask">
+          Retask
         </Link>
-        <Link className="inline-flex cursor-pointer flex-col rounded-lg border border-line-strong bg-surface px-4 py-3 text-sm font-medium hover:bg-surface-2" href="/app/judge">
+        <Link className="rounded-full border border-line bg-surface px-4 py-2 text-sm text-ink-2 hover:border-line-strong hover:text-ink" href="/app/judge">
           Judge mode
-          <span className="mt-1 text-xs font-normal text-ink-2">Destination: judge</span>
         </Link>
       </div>
     </section>

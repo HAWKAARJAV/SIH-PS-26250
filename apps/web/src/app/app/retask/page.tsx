@@ -284,7 +284,7 @@ export default function RetaskPage() {
           const reserveRelease = coa.id === "R" || coa.name === "Reserve Release" || coa.name === "R" || name === "Reserve Release";
           const validator = coa.validation == null ? "not returned" : coa.validation.valid ? "PASS" : "FAIL";
           return (
-          <article key={coa.id} className="rounded-xl border border-line bg-surface p-4">
+          <article key={coa.id} className={`rounded-2xl border bg-surface p-4 shadow-[var(--shadow-1)] ${coa.recommended ? "border-ember/50" : "border-line"}`}>
             <div className="flex items-center justify-between gap-2">
               <h2 className="font-display text-2xl">{name}</h2>
               <span className="flex shrink-0 gap-2">

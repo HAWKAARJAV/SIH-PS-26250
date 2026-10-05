@@ -1,16 +1,17 @@
 import Link from "next/link";
 
 const linkClass =
-  "inline-flex cursor-pointer items-center rounded-lg border border-line-strong bg-surface px-3 py-2 text-sm text-ink underline decoration-ink-3 underline-offset-4 hover:bg-surface-2";
+  "inline-flex items-center rounded-full border border-line-strong bg-surface px-4 py-2 text-sm text-ink hover:bg-surface-2";
 
 export default function DocsPage() {
   return (
-    <main className="mx-auto max-w-3xl px-6 py-12">
-      <h1 className="font-display text-4xl">VYUHA notes for judges</h1>
-      <p className="mt-4 text-ink-2">
+    <main className="mx-auto max-w-3xl px-6 py-16">
+      <p className="text-sm tracking-wide text-ember">For judges</p>
+      <h1 className="mt-2 font-display text-5xl">VYUHA notes for judges</h1>
+      <p className="mt-4 text-lg leading-8 text-ink-2">
         A planning and logistics decision-support prototype for the fictional theatre MERIDIAN. A human approves every published plan.
       </p>
-      <p className="mt-2 rounded-lg bg-ember-tint px-3 py-2 text-sm text-ember">
+      <p className="mt-4 rounded-2xl bg-ember-tint px-4 py-3 text-sm text-ember">
         All theatre data is SYNTHETIC / SIMULATED. Numbers on dashboards and registers come from the API for the loaded scenario — not from live operations.
       </p>
 

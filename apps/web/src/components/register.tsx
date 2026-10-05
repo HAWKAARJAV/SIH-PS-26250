@@ -99,33 +99,33 @@ export function Register({
       <label className="block text-sm text-ink-2">
         Search this register
         <input
-          className="mt-1 block w-full max-w-md rounded-lg border border-line bg-surface px-3 py-2 text-sm text-ink"
+          className="mt-1 block w-full max-w-md rounded-xl border border-line bg-surface px-3 py-2.5 text-sm text-ink"
           type="search"
           placeholder={searchPlaceholder ?? "Filter by any column…"}
           value={query}
           onChange={(event) => setQuery(event.target.value)}
         />
       </label>
-      <div className="overflow-x-auto rounded-xl border border-line bg-surface">
+      <div className="overflow-x-auto rounded-2xl border border-line bg-surface shadow-[var(--shadow-1)]">
         <table className="w-full text-left text-sm">
           <caption className="sr-only">
             {kind} register — showing {Math.min(filtered.length, 80)} of {filtered.length} rows
           </caption>
-          <thead className="bg-surface-2 text-ink-3">
+          <thead className="bg-surface-2/80 text-ink-3">
             <tr>
               {columns.map((col) => (
-                <th key={col.key} className="p-2">
+                <th key={col.key} className="px-3 py-2.5 text-[11px] font-medium uppercase tracking-[0.08em]">
                   {col.label}
-                  {col.unit ? <span className="ml-1 font-normal text-ink-3">({col.unit})</span> : null}
+                  {col.unit ? <span className="ml-1 font-normal normal-case tracking-normal text-ink-3">({col.unit})</span> : null}
                 </th>
               ))}
             </tr>
           </thead>
           <tbody>
             {filtered.slice(0, 80).map((row, index) => (
-              <tr key={String(row.id || row.tail || row.code || index)} className="border-t border-line">
+              <tr key={String(row.id || row.tail || row.code || index)} className="border-t border-line hover:bg-canvas/80">
                 {columns.map((col) => (
-                  <td key={col.key} className={`p-2 ${col.mono ? "font-mono" : ""}`}>
+                  <td key={col.key} className={`px-3 py-2.5 ${col.mono ? "font-mono" : ""}`}>
                     {renderCell(col.key, row[col.key], row)}
                   </td>
                 ))}

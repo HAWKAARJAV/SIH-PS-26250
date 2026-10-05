@@ -135,12 +135,25 @@ export default function JudgePage() {
         <p className="mt-3 text-sm text-ink-3" role="status">No scenario has been loaded in this tour yet.</p>
       )}
       {status && <p className="mt-3 text-sm text-ink-2">{status}</p>}
+      <ol className="mt-6 flex gap-1.5" aria-label="Tour progress">
+        {STEPS.map((step, stepIndex) => (
+          <li key={step.title} className="min-w-0 flex-1">
+            <button
+              className={`h-1.5 w-full rounded-full ${stepIndex === index ? "bg-ember" : stepIndex < index ? "bg-ember/40" : "bg-line"}`}
+              type="button"
+              aria-current={stepIndex === index ? "step" : undefined}
+              aria-label={`Step ${stepIndex + 1}, ${step.title}`}
+              onClick={() => setIndex(stepIndex)}
+            />
+          </li>
+        ))}
+      </ol>
       <p className="mt-4 font-mono text-sm text-ink-3">Step {index + 1} of {STEPS.length} · {scene.time}</p>
-      <article className="mt-4 rounded-xl border border-line bg-surface p-4">
-        <p className="font-mono text-xs text-ink-3">{scene.time}</p>
-        <h2 className="font-display text-2xl">{scene.title}</h2>
-        <p className="mt-2"><span className="text-ink-3">Click. </span>{scene.click}</p>
-        <p className="mt-2"><span className="text-ink-3">Success. </span>{scene.success}</p>
+      <article className="mt-3 rounded-2xl border border-line bg-surface p-5 shadow-[var(--shadow-1)]">
+        <p className="font-mono text-xs text-ember">{scene.time}</p>
+        <h2 className="mt-1 font-display text-3xl">{scene.title}</h2>
+        <p className="mt-3 text-sm leading-6"><span className="text-ink-3">Click. </span>{scene.click}</p>
+        <p className="mt-2 text-sm leading-6"><span className="text-ink-3">Success. </span>{scene.success}</p>
         {scene.action === "reset" ? (
           <button className="mt-4 rounded-lg bg-ember px-4 py-3 text-surface disabled:cursor-not-allowed disabled:opacity-50" type="button" disabled={!canReset || loading} onClick={() => void resetDemo()}>
             Reset demo to scenario S5

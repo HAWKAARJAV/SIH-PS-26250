@@ -152,9 +152,9 @@ export default function PlanPage() {
         related={[{ href: "/app/ato", label: "ATO handoff" }, { href: "/app/missions", label: "Missions" }]}
       />
       <p className="mt-2 max-w-3xl text-sm text-ink-2">{gate}</p>
-      <div className="mt-4 grid gap-3 sm:grid-cols-3">
+      <div className="mt-4 grid gap-3 rounded-2xl border border-line bg-surface p-3 shadow-[var(--shadow-1)] sm:grid-cols-3">
         <div>
-          <button className="w-full rounded-lg bg-ember px-4 py-3 text-surface disabled:cursor-not-allowed disabled:opacity-60" type="button" disabled={!canPlan || busy} onClick={() => void optimise()}>
+          <button className="w-full rounded-xl bg-ember px-4 py-3 text-surface disabled:cursor-not-allowed disabled:opacity-60" type="button" disabled={!canPlan || busy} onClick={() => void optimise()}>
             {busy ? "Optimising the flying day…" : "Optimise the flying day"}
           </button>
           <p className="mt-1 text-xs text-ink-2">
@@ -164,7 +164,7 @@ export default function PlanPage() {
           </p>
         </div>
         <div>
-          <button className="w-full rounded-lg border border-line-strong bg-surface px-4 py-3 disabled:cursor-not-allowed disabled:opacity-60" type="button" disabled={!canPlan || !active} onClick={() => void validatePlan()}>
+          <button className="w-full rounded-xl border border-line-strong bg-canvas px-4 py-3 disabled:cursor-not-allowed disabled:opacity-60" type="button" disabled={!canPlan || !active} onClick={() => void validatePlan()}>
             Check this plan
           </button>
           <p className="mt-1 text-xs text-ink-2">
@@ -176,7 +176,7 @@ export default function PlanPage() {
           </p>
         </div>
         <div>
-          <button className="w-full rounded-lg border border-line-strong bg-surface px-4 py-3 disabled:cursor-not-allowed disabled:opacity-60" type="button" disabled={!canPlan || !active || active.status !== "DRAFT"} onClick={() => void submitPlan()}>
+          <button className="w-full rounded-xl border border-line-strong bg-canvas px-4 py-3 disabled:cursor-not-allowed disabled:opacity-60" type="button" disabled={!canPlan || !active || active.status !== "DRAFT"} onClick={() => void submitPlan()}>
             Submit for commander approval
           </button>
           <p className="mt-1 text-xs text-ink-2">
@@ -221,7 +221,7 @@ export default function PlanPage() {
         </div>
       )}
       {active && (
-        <div className="mt-6 overflow-hidden rounded-xl border border-line bg-surface">
+        <div className="mt-6 overflow-hidden rounded-2xl border border-line bg-surface shadow-[var(--shadow-1)]">
           <table className="w-full text-left text-sm">
             <caption className="sr-only">Assignments in {active.id}</caption>
             <thead className="bg-surface-2 text-ink-3">
