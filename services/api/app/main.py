@@ -72,10 +72,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     async def validation_error(request: Request, exc: RequestValidationError) -> JSONResponse:
         return JSONResponse(status_code=422, content=_envelope(request, "VALIDATION", "The request could not be read.", {"errors": exc.errors()}))
 
+    @app.get("/")
     @app.get("/healthz")
     @app.get("/api/healthz")
     def health() -> dict[str, str]:
         return {"status": "ok", "service": "vyuha-api"}
+
+    _seed_if_empty()
 
     @app.get("/readyz")
     def ready() -> dict[str, str]:
@@ -105,6 +108,27 @@ def _envelope(request: Request, code: str, message: str, details: dict[str, Any]
         "details": details or {},
         "request_id": getattr(request.state, "request_id", ""),
     }
+
+
+def _seed_if_empty() -> None:
+    """Hosted disks start empty. Load the demo theatre once so sign-in works."""
+    from sqlalchemy import select
+
+    from app.db import SessionLocal
+    from app.tables import User
+
+    if SessionLocal is None:
+        return
+    db = SessionLocal()
+    try:
+        has_user = db.scalar(select(User.id).limit(1))
+    finally:
+        db.close()
+    if has_user is not None:
+        return
+    from scenarios.cli import seed
+
+    seed()
 
 
 def _bootstrap_settings() -> Settings:

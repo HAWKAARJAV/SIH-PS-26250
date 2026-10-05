@@ -229,7 +229,7 @@ export default function MapPage() {
             map!.getCanvas().style.cursor = top ? "pointer" : "";
             setCursor(`${event.lngLat.lat.toFixed(2)}°N  ${event.lngLat.lng.toFixed(2)}°E${hint ? `  ·  ${hint}` : ""}`);
           });
-          map.on("mouseleave", () => setCursor(""));
+          map.on("mouseout", () => setCursor(""));
           if (!cancelled) setReady(true);
         });
       })
