@@ -107,10 +107,20 @@ export default function RetaskPage() {
       pending -= 1;
       if (pending <= 0) setLoading(false);
     }
-    api<{ items: Aircraft[] }>("/api/v1/registers/aircraft").then((data) => {
+    Promise.all([
+      api<{ items: Aircraft[] }>("/api/v1/registers/aircraft"),
+      api<{ items: { id: string }[] }>("/api/v1/plans").then(async (list) => {
+        const id = list.items[0]?.id;
+        if (!id) return [] as string[];
+        const plan = await api<{ assignments?: { tail: string }[] }>(`/api/v1/plans/${id}`);
+        return [...new Set((plan.assignments ?? []).map((row) => row.tail))];
+      }).catch(() => [] as string[]),
+    ]).then(([data, tasked]) => {
       const fmc = data.items.filter((row) => row.status === "FMC");
-      setTails(fmc);
-      setTail(fmc.find((row) => row.tail === "TAIL-114")?.tail ?? fmc[0]?.tail ?? "");
+      const onPlan = fmc.filter((row) => tasked.includes(row.tail));
+      const shown = onPlan.length ? onPlan : fmc;
+      setTails(shown);
+      setTail(shown[0]?.tail ?? "");
     }).catch((err: unknown) => setError(err instanceof Error ? err.message : "Fleet did not load.")).finally(done);
     api<{ event: { id: string } | null; coas: Coa[] }>("/api/v1/events/latest")
       .then((data) => {

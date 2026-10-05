@@ -93,7 +93,10 @@ def write_world(db: Session, world: dict[str, Any], *, reset_operational: bool =
     for row in world["missions"]:
         db.add(MissionRow(id=row["id"], payload=row))
     for row in world["sources"]:
-        db.add(SourceRow(id=row["id"], payload={**row, "status": "LIVE", "degraded": False}))
+        payload = dict(row)
+        payload.setdefault("status", "LIVE")
+        payload.setdefault("degraded", False)
+        db.add(SourceRow(id=row["id"], payload=payload))
     params = db.get(ParameterRow, 1)
     if params is None:
         db.add(ParameterRow(id=1, payload=world["parameters"], version=1))
@@ -112,9 +115,14 @@ def write_world(db: Session, world: dict[str, Any], *, reset_operational: bool =
         sim.scale = world["scale"]
         sim.epoch = world["epoch"]
         sim.sim_now = world["now"]
-        sim.status = "PAUSED"
-        sim.rate = 1
+        if reset_operational:
+            sim.status = "PAUSED"
+            sim.rate = 1
+            sim.wall_anchor = None
         sim.version += 1
+    # autoflush is off. Callers read the theatre in the same request, so the inserts
+    # have to hit the database before that select or the snapshot comes back empty.
+    db.flush()
 
 
 def read_world(db: Session) -> dict[str, Any]:

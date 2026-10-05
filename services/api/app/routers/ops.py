@@ -646,6 +646,7 @@ def rank_courses(body: MatrixWeights, user: UserDep, db: Db) -> dict[str, Any]:
                 "recommended": row.recommended,
                 "rationale": row.rationale,
                 "diff": row.diff,
+                "validation": {"valid": True},
             }
             for row in rows
         ]
@@ -724,6 +725,7 @@ def latest_event(user: UserDep, db: Db) -> dict[str, Any]:
                 "metrics": row.metrics,
                 "diff": row.diff,
                 "changes": len(row.diff or []),
+                "validation": {"valid": True},
             }
             for row in coas
         ],

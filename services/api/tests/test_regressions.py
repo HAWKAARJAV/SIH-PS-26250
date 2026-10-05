@@ -45,6 +45,9 @@ def test_c1_event_injection_preserves_plan_assignments(tmp_path) -> None:
         headers={"X-CSRF-Token": csrf},
     )
     assert event.status_code == 200
+    body = event.json()
+    assert body["impact"]["affected_missions"], body["impact"]
+    assert len(body["coas"]) >= 1, body["impact"]
     after = client.get(f"/api/v1/plans/{plan_id}").json()
     assert len(after["assignments"]) == count_before
 

@@ -50,10 +50,25 @@ export function Shell({ children }: { children: React.ReactNode }) {
     api<{ api: string; db: string; solver: string; fusion: string; audit: string }>("/api/v1/system/health")
       .then((row) => setHealth(`API ${row.api} · DB ${row.db} · SOLVER ${row.solver} · FUSION ${row.fusion} · AUDIT ${row.audit}`))
       .catch(() => setHealth(""));
-    if ("serviceWorker" in navigator) {
-      navigator.serviceWorker.register("/sw.js").catch(() => undefined);
-    }
   }, [router]);
+
+  useEffect(() => {
+    if (!("serviceWorker" in navigator)) return;
+    if (process.env.NODE_ENV !== "production") {
+      void navigator.serviceWorker.getRegistrations().then((regs) => {
+        for (const reg of regs) void reg.unregister();
+      });
+      if ("caches" in window) {
+        void caches.keys().then((keys) => {
+          for (const key of keys) {
+            if (key.startsWith("vyuha-")) void caches.delete(key);
+          }
+        });
+      }
+      return;
+    }
+    void navigator.serviceWorker.register("/sw.js").catch(() => undefined);
+  }, []);
 
   return (
     <div className="min-h-screen">

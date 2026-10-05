@@ -24,6 +24,7 @@ export default function MapPage() {
         setTable(data.items);
         const maplibre = await import("maplibre-gl");
         if (!ref.current || cancelled) return;
+        maplibre.setWorkerUrl("/vendor/maplibre/maplibre-gl-worker.mjs");
         map = new maplibre.Map({
           container: ref.current,
           style: { version: 8, sources: {}, layers: [{ id: "bg", type: "background", paint: { "background-color": "#F4EEE3" } }] },
