@@ -11,8 +11,16 @@ from sqlalchemy.orm import Session
 
 
 def ensure_value_column(db: Session) -> None:
-    rows = db.execute(text("PRAGMA table_info(provenance)")).all()
-    if rows and not any(row[1] == "value" for row in rows):
+    bind = db.get_bind()
+    if bind.dialect.name == "sqlite":
+        rows = db.execute(text("PRAGMA table_info(provenance)")).all()
+        missing = bool(rows) and not any(row[1] == "value" for row in rows)
+    else:
+        found = db.execute(
+            text("SELECT 1 FROM information_schema.columns WHERE table_name = 'provenance' AND column_name = 'value'")
+        ).first()
+        missing = found is None
+    if missing:
         db.execute(text("ALTER TABLE provenance ADD COLUMN value VARCHAR(64)"))
         db.commit()
 
