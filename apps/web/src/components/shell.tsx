@@ -8,21 +8,21 @@ import { api, setCsrf, type Me } from "@/lib/api";
 import { clockLine } from "@/lib/dtg";
 
 const NAV = [
-  { href: "/app", label: "Dashboard", group: "Command" },
-  { href: "/app/plan", label: "Planner", group: "Plan" },
-  { href: "/app/retask", label: "Retask", group: "Plan" },
-  { href: "/app/missions", label: "Missions", group: "Plan" },
-  { href: "/app/ato", label: "ATO", group: "Plan" },
-  { href: "/app/fleet", label: "Fleet", group: "Resources" },
-  { href: "/app/crew", label: "Crew", group: "Resources" },
-  { href: "/app/stores", label: "Stores", group: "Resources" },
-  { href: "/app/bases", label: "Bases", group: "Resources" },
-  { href: "/app/fusion", label: "COP Health", group: "Intelligence" },
-  { href: "/app/map", label: "Map", group: "Intelligence" },
-  { href: "/app/audit", label: "Audit", group: "Governance" },
-  { href: "/app/judge", label: "Judge mode", group: "Governance" },
-  { href: "/app/admin", label: "Admin", group: "Governance" },
-  { href: "/app/analytics", label: "Forecasts", group: "Intelligence" },
+  { href: "/app", label: "Dashboard", subtitle: "Five-second command snapshot", group: "Command" },
+  { href: "/app/plan", label: "Planner", subtitle: "Optimise and validate the flying day", group: "Plan" },
+  { href: "/app/retask", label: "Retask", subtitle: "Inject disruption and pick a COA", group: "Plan" },
+  { href: "/app/missions", label: "Missions", subtitle: "Requested sorties register", group: "Plan" },
+  { href: "/app/ato", label: "ATO", subtitle: "Submit, approve, publish the order", group: "Plan" },
+  { href: "/app/fleet", label: "Fleet", subtitle: "Aircraft tails and FMC status", group: "Resources" },
+  { href: "/app/crew", label: "Crew", subtitle: "Roster, duty, and fatigue", group: "Resources" },
+  { href: "/app/stores", label: "Stores", subtitle: "Load-out stock by base", group: "Resources" },
+  { href: "/app/bases", label: "Bases", subtitle: "Launch and recovery rates", group: "Resources" },
+  { href: "/app/fusion", label: "COP Health", subtitle: "Eight feeds and conflict inbox", group: "Intelligence" },
+  { href: "/app/map", label: "Map", subtitle: "Theatre MERIDIAN picture", group: "Intelligence" },
+  { href: "/app/analytics", label: "Forecasts", subtitle: "Simulated ML and Monte Carlo", group: "Intelligence" },
+  { href: "/app/audit", label: "Audit", subtitle: "Hash chain and verify", group: "Governance" },
+  { href: "/app/judge", label: "Judge mode", subtitle: "Three-minute demo script", group: "Governance" },
+  { href: "/app/admin", label: "Admin", subtitle: "Load scenario packs", group: "Governance" },
 ];
 
 export function Shell({ children }: { children: React.ReactNode }) {
@@ -33,6 +33,8 @@ export function Shell({ children }: { children: React.ReactNode }) {
   const [zone, setZone] = useState<"Z" | "IST">("Z");
   const [health, setHealth] = useState<string>("");
   const [error, setError] = useState("");
+  const [navOpen, setNavOpen] = useState(false);
+  const [clockNote, setClockNote] = useState("");
   const showAdmin = me?.role === "admin" || me?.role === "commander";
 
   useEffect(() => {
@@ -41,7 +43,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
         setCsrf(user.csrf);
         setMe(user);
       })
-      .catch(() => router.replace("/login"));
+      .catch(() => router.replace(`/login?next=${encodeURIComponent(pathname || "/app")}`));
     api<{ dtg: string; pack: string; seed: number }>("/api/v1/clock")
       .then((row) => setClock({ pack: row.pack, dtg: row.dtg, seed: row.seed }))
       .catch((err: unknown) => setError(err instanceof Error ? err.message : "Clock unavailable."));
@@ -56,10 +58,10 @@ export function Shell({ children }: { children: React.ReactNode }) {
   return (
     <div className="min-h-screen">
       <p className="bg-ember-tint px-4 py-1 text-center text-xs tracking-wide text-ember">{brand.disclaimer}</p>
-      <div className="flex">
-        <aside className="hidden w-[248px] shrink-0 border-r border-line bg-surface p-4 md:block">
+      <div className="flex flex-col md:flex-row">
+        <aside className={`${navOpen ? "block" : "hidden"} w-full shrink-0 border-r border-line bg-surface p-4 md:block md:w-[248px]`}>
           <p className="font-display text-xl">{brand.name}</p>
-          <nav className="mt-6 grid gap-4">
+          <nav className="mt-6 grid gap-4" aria-label="Main">
             {["Command", "Plan", "Resources", "Intelligence", "Governance"].map((group) => (
               <div key={group}>
                 <p className="mb-1 text-xs uppercase tracking-wide text-ink-3">{group}</p>
@@ -67,9 +69,12 @@ export function Shell({ children }: { children: React.ReactNode }) {
                   <Link
                     key={item.href}
                     href={item.href}
+                    title={item.subtitle}
                     className={`block rounded-lg px-2 py-2 text-sm ${pathname === item.href ? "bg-ember-tint text-ember" : "text-ink-2"}`}
+                    onClick={() => setNavOpen(false)}
                   >
-                    {item.label}
+                    <span className="block font-medium">{item.label}</span>
+                    <span className="mt-0.5 block text-xs text-ink-3">{item.subtitle}</span>
                   </Link>
                 ))}
               </div>
@@ -77,15 +82,25 @@ export function Shell({ children }: { children: React.ReactNode }) {
           </nav>
         </aside>
         <div className="min-w-0 flex-1">
-          <header className="flex h-14 items-center justify-between border-b border-line px-4">
-            <div className="font-mono text-xs text-ink-2 md:text-sm">
+          <header className="flex h-14 items-center justify-between gap-2 border-b border-line px-4">
+            <button
+              className="rounded-lg border border-line px-2 py-1 text-xs md:hidden"
+              type="button"
+              aria-expanded={navOpen}
+              onClick={() => setNavOpen((open) => !open)}
+            >
+              {navOpen ? "Close menu" : "Open menu"}
+            </button>
+            <div className="min-w-0 font-mono text-xs text-ink-2 md:text-sm">
               <p>{clock ? clockLine(clock.pack, clock.dtg, clock.seed, zone) : "Loading the clock…"}</p>
               {health && <p className="text-ink-3">{health}</p>}
+              {clockNote && <p className="text-ink-2">{clockNote}</p>}
             </div>
             <div className="flex items-center rounded-lg border border-line" role="group" aria-label="Clock zone">
               <button
                 className={`px-2 py-1 text-xs ${zone === "Z" ? "bg-ember-tint text-ember" : "text-ink-2"}`}
                 type="button"
+                title="Show the header clock in Zulu (Z)"
                 aria-pressed={zone === "Z"}
                 onClick={() => setZone("Z")}
               >
@@ -94,6 +109,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
               <button
                 className={`px-2 py-1 text-xs ${zone === "IST" ? "bg-ember-tint text-ember" : "text-ink-2"}`}
                 type="button"
+                title="Show the header clock in India Standard Time"
                 aria-pressed={zone === "IST"}
                 onClick={() => setZone("IST")}
               >
@@ -105,12 +121,31 @@ export function Shell({ children }: { children: React.ReactNode }) {
                 <button
                   className="rounded border border-line px-2 py-1 text-xs"
                   type="button"
-                  onClick={() => void api("/api/v1/clock", { method: "POST", body: JSON.stringify({ status: "RUNNING", rate: 10 }) })}
+                  onClick={() => {
+                    setClockNote("");
+                    void api("/api/v1/clock", { method: "POST", body: JSON.stringify({ status: "RUNNING", rate: 10 }) })
+                      .then(() => setClockNote("Simulation clock is running at 10×."))
+                      .catch((err: unknown) => setClockNote(err instanceof Error ? err.message : "The simulation clock did not start."));
+                  }}
                 >
-                  Sim 10×
+                  Run simulation clock at 10×
                 </button>
               )}
-              <p className="text-sm">{me ? `${me.display_name}` : "…"}</p>
+              <p className="text-sm">{me ? me.display_name : "…"}</p>
+              <button
+                className="rounded border border-line px-2 py-1 text-xs"
+                type="button"
+                onClick={() => {
+                  void api("/api/v1/auth/logout", { method: "POST" })
+                    .catch(() => undefined)
+                    .finally(() => {
+                      setCsrf("");
+                      router.push("/login");
+                    });
+                }}
+              >
+                Switch role
+              </button>
             </div>
           </header>
           <div className="h-0.5 bg-gradient-to-r from-ember to-canvas" />

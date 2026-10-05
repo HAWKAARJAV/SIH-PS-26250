@@ -42,8 +42,8 @@ def solve_cpsat(
     airspace_intervals: dict[str, list[Any]] = defaultdict(list)
     tanker_intervals: dict[str, list[Any]] = defaultdict(list)
     stock_terms: dict[tuple[str, str], list[Any]] = defaultdict(list)
-    launch_terms: dict[tuple[str, int], list[Any]] = defaultdict(list)
-    recovery_terms: dict[tuple[str, int], list[Any]] = defaultdict(list)
+    launch_terms: dict[tuple[str, int], list[tuple[Any, int]]] = defaultdict(list)
+    recovery_terms: dict[tuple[str, int], list[tuple[Any, int]]] = defaultdict(list)
     mission_state: dict[str, dict[str, Any]] = {}
     tail_uses: dict[str, list[Any]] = defaultdict(list)
     crew_loads: dict[str, list[tuple[Any, int]]] = defaultdict(list)
@@ -135,11 +135,13 @@ def _build_mission(
     airspace_intervals: dict[str, list[Any]],
     tanker_intervals: dict[str, list[Any]],
     stock_terms: dict[tuple[str, str], list[Any]],
-    launch_terms: dict[tuple[str, int], list[Any]],
-    recovery_terms: dict[tuple[str, int], list[Any]],
+    launch_terms: dict[tuple[str, int], list[tuple[Any, int]]],
+    recovery_terms: dict[tuple[str, int], list[tuple[Any, int]]],
     tail_uses: dict[str, list[Any]],
     crew_loads: dict[str, list[tuple[Any, int]]],
 ) -> dict[str, Any] | None:
+    if _exceeds_base_rate(snapshot, mission):
+        return None
     allowed = _allowed_starts(snapshot, mission, epoch)
     if not allowed:
         return None
@@ -202,6 +204,17 @@ def _build_mission(
         "slots": slot_vars,
         "tankers": tanker_lits,
     }
+
+
+def _exceeds_base_rate(snapshot: dict[str, Any], mission: dict[str, Any]) -> bool:
+    """A package launches and recovers together, so more slots than the 15-minute rate can never be valid."""
+    slots = len(mission["slots"])
+    bases = {base["id"]: base for base in snapshot["bases"]}
+    launch = bases.get(mission["launch_base"])
+    recover = bases.get(mission["recover_base"])
+    if launch is not None and slots > int(launch["launch_rate_15m"]):
+        return True
+    return recover is not None and slots > int(recover["recovery_rate_15m"])
 
 
 def _pin_frozen(
@@ -317,11 +330,14 @@ def _rate_bins(
     mission: dict[str, Any],
     served: Any,
     start: Any,
-    launch_terms: dict[tuple[str, int], list[Any]],
-    recovery_terms: dict[tuple[str, int], list[Any]],
+    launch_terms: dict[tuple[str, int], list[tuple[Any, int]]],
+    recovery_terms: dict[tuple[str, int], list[tuple[Any, int]]],
 ) -> None:
     horizon = int(snapshot["horizon_min"])
     duration = int(mission["duration_min"])
+    # The validator counts one launch and one recovery per assignment row, i.e. per slot.
+    # Every slot of a package launches and recovers together, so each literal weighs len(slots).
+    packages = len(mission["slots"])
     max_bin = (horizon + duration) // 15 + 2
     launch_lits: list[Any] = []
     recovery_lits: list[Any] = []
@@ -333,14 +349,14 @@ def _rate_bins(
         model.add(start <= hi).only_enforce_if(launch_lit)
         model.add_implication(launch_lit, served)
         launch_lits.append(launch_lit)
-        launch_terms[(mission["launch_base"], bin_index)].append(launch_lit)
+        launch_terms[(mission["launch_base"], bin_index)].append((launch_lit, packages))
 
         recovery_lit = model.new_bool_var(f"recover_{mission['id']}_{bin_index}")
         model.add(start + duration >= lo).only_enforce_if(recovery_lit)
         model.add(start + duration <= hi).only_enforce_if(recovery_lit)
         model.add_implication(recovery_lit, served)
         recovery_lits.append(recovery_lit)
-        recovery_terms[(mission["recover_base"], bin_index)].append(recovery_lit)
+        recovery_terms[(mission["recover_base"], bin_index)].append((recovery_lit, packages))
 
     if launch_lits:
         model.add(sum(launch_lits) == served)
@@ -400,18 +416,22 @@ def _cap_stock(model: cp_model.CpModel, snapshot: dict[str, Any], terms: dict[tu
         model.add(sum(literals) <= available.get(key, 0))
 
 
-def _cap_launch(model: cp_model.CpModel, snapshot: dict[str, Any], terms: dict[tuple[str, int], list[Any]]) -> None:
+def _cap_launch(
+    model: cp_model.CpModel, snapshot: dict[str, Any], terms: dict[tuple[str, int], list[tuple[Any, int]]]
+) -> None:
     rates = {base["id"]: int(base["launch_rate_15m"]) for base in snapshot["bases"]}
-    for (base_id, _bin), literals in terms.items():
-        if literals:
-            model.add(sum(literals) <= rates.get(base_id, 1))
+    for (base_id, _bin), weighted in terms.items():
+        if weighted:
+            model.add(sum(lit * count for lit, count in weighted) <= rates.get(base_id, 1))
 
 
-def _cap_recovery(model: cp_model.CpModel, snapshot: dict[str, Any], terms: dict[tuple[str, int], list[Any]]) -> None:
+def _cap_recovery(
+    model: cp_model.CpModel, snapshot: dict[str, Any], terms: dict[tuple[str, int], list[tuple[Any, int]]]
+) -> None:
     rates = {base["id"]: int(base["recovery_rate_15m"]) for base in snapshot["bases"]}
-    for (base_id, _bin), literals in terms.items():
-        if literals:
-            model.add(sum(literals) <= rates.get(base_id, 1))
+    for (base_id, _bin), weighted in terms.items():
+        if weighted:
+            model.add(sum(lit * count for lit, count in weighted) <= rates.get(base_id, 1))
 
 
 def _allowed_starts(snapshot: dict[str, Any], mission: dict[str, Any], epoch: Any) -> list[int]:

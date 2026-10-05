@@ -37,6 +37,8 @@ def build_plan(
     report = validate(snapshot, candidate) if candidate else {"valid": False, "violations": [], "warnings": []}
     used_solver = bool(candidate) and report["valid"]
     assignments = candidate if used_solver else greedy_plan
+    solver_status = str(solved["status"])
+    fallback = _fallback(used_solver, solver_status, candidate, report)
     if not used_solver:
         report = validate(snapshot, assignments)
         solved = {**solved, "status": "HEURISTIC" if solved["status"] != "INFEASIBLE" else solved["status"]}
@@ -47,7 +49,23 @@ def build_plan(
         "kpis": score(snapshot, assignments),
         "proven": used_solver and solved["status"] == "OPTIMAL",
         "label": solved["status"] if used_solver else "heuristic, not proven optimal",
+        "fallback": fallback,
     }
+
+
+def _fallback(
+    used_solver: bool, solver_status: str, candidate: list[dict[str, Any]], report: dict[str, Any]
+) -> dict[str, Any]:
+    """Say plainly when the greedy plan replaced the CP-SAT plan, and why."""
+    if used_solver:
+        return {"used": False, "reason_codes": [], "solver_status": solver_status}
+    reasons: list[str] = []
+    if not candidate:
+        reasons.append(f"SOLVER_{solver_status}" if solver_status in {"INFEASIBLE", "UNKNOWN", "MODEL_INVALID"} else "SOLVER_NO_PLAN")
+    else:
+        reasons.append("VALIDATOR_REJECTED")
+        reasons.extend(sorted({str(v["code"]) for v in report["violations"]}))
+    return {"used": True, "reason_codes": reasons, "solver_status": solver_status}
 
 
 def score(snapshot: dict[str, Any], assignments: list[dict[str, Any]]) -> dict[str, float]:

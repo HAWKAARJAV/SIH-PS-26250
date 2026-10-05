@@ -7,21 +7,35 @@ import { team } from "@/config/team";
 import { EmptyState, ErrorState, LoadingState } from "@/components/states";
 
 const BARS = [
-  { id: "ADP", label: "ADP", start: 8, span: 18, lane: 0 },
+  { id: "ADP", label: "ADP patrol", start: 8, span: 18, lane: 0 },
   { id: "ISR", label: "ISR", start: 22, span: 24, lane: 1 },
   { id: "AAR", label: "AAR", start: 30, span: 20, lane: 2 },
   { id: "SAR", label: "SAR", start: 48, span: 14, lane: 3 },
 ];
 
+const linkClass =
+  "inline-flex cursor-pointer items-center rounded-lg border border-line-strong bg-surface px-3 py-2 text-sm text-ink underline decoration-ink-3 underline-offset-4 hover:bg-surface-2";
+const primaryClass =
+  "inline-flex cursor-pointer items-center rounded-lg bg-ember px-4 py-3 text-sm font-medium text-surface hover:bg-ember-hover";
+
 export default function HomePage() {
   const [impact, setImpact] = useState("");
   const [benchState, setBenchState] = useState<"loading" | "ready" | "empty" | "error">("loading");
+  const [benchError, setBenchError] = useState("The benchmark file could not be read.");
   const [struck, setStruck] = useState(false);
+
   useEffect(() => {
     fetch("/api/v1/benchmark")
-      .then((response) => {
-        if (!response.ok) throw new Error("The benchmark file could not be read.");
-        return response.json() as Promise<{ runs?: number; solver_beats_or_ties_greedy?: number; scale?: string; seeds?: number[] }>;
+      .then(async (response) => {
+        const data = (await response.json().catch(() => ({}))) as {
+          message?: string;
+          runs?: number;
+          solver_beats_or_ties_greedy?: number;
+          scale?: string;
+          seeds?: number[];
+        };
+        if (!response.ok) throw new Error(data.message || "The benchmark file could not be read.");
+        return data;
       })
       .then((data) => {
         if (!data.runs) {
@@ -29,50 +43,61 @@ export default function HomePage() {
           return;
         }
         setImpact(
-          `SIMULATED BENCHMARK · scale ${data.scale} · seeds ${data.seeds?.join(", ")}: solver beat or tied greedy in ${data.solver_beats_or_ties_greedy} of ${data.runs} runs.`,
+          `Simulated benchmark only. At scale ${data.scale}, seeds ${data.seeds?.join(", ")}, the solver beat or tied greedy in ${data.solver_beats_or_ties_greedy} of ${data.runs} runs.`,
         );
         setBenchState("ready");
       })
-      .catch(() => setBenchState("error"));
+      .catch((err: unknown) => {
+        setBenchError(err instanceof Error ? err.message : "The benchmark file could not be read.");
+        setBenchState("error");
+      });
   }, []);
+
   const bars = useMemo(
     () =>
       BARS.map((bar) =>
-        struck && bar.id === "ADP" ? { ...bar, start: 40, label: "ADP moved" } : bar,
+        struck && bar.id === "ADP" ? { ...bar, start: 40, label: "ADP moved later" } : bar,
       ),
     [struck],
   );
+
   return (
     <main className="mx-auto max-w-[1100px] px-6 py-8">
       <p className="rounded-full bg-ember-tint px-3 py-1 text-center text-xs tracking-wide text-ember">{brand.disclaimer}</p>
-      <header className="mt-8 flex items-center justify-between">
+      <header className="mt-8 flex flex-wrap items-center justify-between gap-4">
         <p className="font-display text-2xl">{brand.name}</p>
-        <nav className="flex gap-4 text-sm">
-          <a href="#how">How it works</a>
-          <Link href="/docs">Docs</Link>
-          <Link href="/login">Launch live demo</Link>
+        <nav className="flex flex-wrap gap-2" aria-label="Landing page">
+          <a className={linkClass} href="#how">Jump to how a day is replanned</a>
+          <Link className={linkClass} href="/docs">Open glossary and architecture notes</Link>
+          <Link className={linkClass} href="/login">Sign in to the live demo</Link>
         </nav>
       </header>
       <section className="mt-16 grid gap-10 md:grid-cols-[1.1fr_.9fr]">
         <div>
-          <h1 className="font-display text-5xl leading-tight text-ink">{brand.tagline}</h1>
+          <p className="text-sm text-ink-3">{brand.tagline}</p>
+          <h1 className="mt-2 font-display text-4xl leading-tight text-ink md:text-5xl">
+            VYUHA proposes a new flying plan when the day changes, and a person has to approve it.
+          </h1>
           <p className="mt-4 max-w-xl text-ink-2">
-            One fused picture of aircraft, crew, stores, airspace, weather, threats and tasking.
-            When the day changes, VYUHA offers a few explainable courses of action. A person approves.
+            Judges see one picture of aircraft, crew, stores, airspace, weather, threats and tasking for the fictional theatre MERIDIAN. The software offers a few courses of action. It does not launch anything.
           </p>
-          <div className="mt-6 flex gap-3">
-            <Link className="rounded-lg bg-ember px-4 py-3 text-surface" href="/login">Launch live demo</Link>
-            <Link className="rounded-lg border border-line-strong px-4 py-3" href="/app/judge">Take the 3-minute tour</Link>
+          <div className="mt-6 flex flex-wrap gap-3">
+            <Link className={primaryClass} href="/login">Sign in and open the live demo</Link>
+            <Link className={linkClass} href="/app/judge">Open the 3-minute tour for judges</Link>
           </div>
         </div>
         <div className="rounded-2xl border border-line bg-surface p-4 shadow-[var(--shadow-1)]">
-          <div className="mb-3 flex items-center justify-between text-sm">
-            <span>Mini tasking board</span>
-            <button className="rounded-full bg-ember-tint px-3 py-1 text-ember" type="button" onClick={() => setStruck(true)}>
-              Murphy strikes
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-2 text-sm">
+            <span>Mini tasking board — illustration, not a live plan</span>
+            <button
+              className="cursor-pointer rounded-lg border border-ember bg-ember px-3 py-2 text-sm font-medium text-surface hover:bg-ember-hover"
+              type="button"
+              onClick={() => setStruck(true)}
+            >
+              Murphy strikes — illustration only
             </button>
           </div>
-          <div className="relative h-40">
+          <div className="relative h-40" aria-hidden="true">
             {bars.map((bar) => (
               <div
                 key={bar.id}
@@ -83,19 +108,24 @@ export default function HomePage() {
               </div>
             ))}
           </div>
-          <p className="mt-2 text-xs text-ink-3">{struck ? "The patrol slid clear of the closure. Nothing launched itself." : "A quiet hour. The button only moves this sketch."}</p>
+          <p className="mt-2 text-sm text-ink-2">
+            {struck
+              ? "Illustration only. The ADP patrol bar moved later on this sketch so it clears the closure. No aircraft was retasked and no plan was saved."
+              : "Nothing has moved yet. The button only slides the ADP bar on this sketch."}
+          </p>
         </div>
       </section>
       <section id="how" className="mt-20 grid gap-4 md:grid-cols-4">
+        <h2 className="sr-only">How a flying day is replanned</h2>
         {["Fuse", "Plan", "Retask", "Decide"].map((step, index) => (
           <article key={step} className="rounded-xl border border-line bg-surface p-4">
             <p className="font-mono text-ink-3">0{index + 1}</p>
-            <h2 className="mt-2 font-display text-2xl">{step}</h2>
+            <h3 className="mt-2 font-display text-2xl">{step}</h3>
             <p className="mt-2 text-sm text-ink-2">
-              {step === "Fuse" && "Eight feeds, one value, with the age and the source still attached."}
-              {step === "Plan" && "A baseline ATO that an independent checker must also call valid."}
-              {step === "Retask" && "A small neighbourhood moves. The rest of the day stays put."}
-              {step === "Decide" && "Ranked options, a deadline, and a name on the approval."}
+              {step === "Fuse" && "Eight feeds become one picture, and each value keeps its age and source."}
+              {step === "Plan" && "A baseline air tasking order is built, then an independent checker must also call it valid."}
+              {step === "Retask" && "A small part of the day moves. The rest of the schedule stays put."}
+              {step === "Decide" && "Ranked options, a deadline, and a named person on the approval."}
             </p>
           </article>
         ))}
@@ -108,10 +138,13 @@ export default function HomePage() {
           ))}
         </ul>
       </section>
-      {benchState === "loading" && <LoadingState label="Reading the benchmark file…" />}
-      {benchState === "error" && <ErrorState message="The benchmark file could not be read." />}
-      {benchState === "empty" && <EmptyState title="No benchmark file" detail="Nothing is published yet, so this line stays blank." />}
-      {benchState === "ready" && <p className="mt-8 rounded-xl border border-line bg-surface px-4 py-3 text-sm">{impact}</p>}
+      <section className="mt-16" aria-live="polite">
+        <h2 className="font-display text-3xl">Simulated benchmark</h2>
+        {benchState === "loading" && <LoadingState label="Reading the benchmark file…" />}
+        {benchState === "error" && <ErrorState message={benchError} />}
+        {benchState === "empty" && <EmptyState title="No benchmark runs published" detail="The file came back with no runs, so this line stays blank." />}
+        {benchState === "ready" && <p className="mt-4 rounded-xl border border-line bg-surface px-4 py-3 text-sm">{impact}</p>}
+      </section>
       {team.length > 0 && (
         <section className="mt-16">
           <h2 className="font-display text-3xl">Team</h2>

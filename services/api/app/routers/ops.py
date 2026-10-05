@@ -286,7 +286,10 @@ def optimise(db: Db, user: User = Depends(need("optimise"))) -> dict[str, Any]:
     plan_id = _store_plan(db, user.id, built, status="DRAFT")
     append_audit(db, actor=user.id, action="plan.optimise", ref=plan_id, diff=built["kpis"])
     db.commit()
-    return {"plan_id": plan_id, "kpis": built["kpis"], "label": built["label"], "validation": built["validation"], "solver": built["solver"]}
+    return {
+        "plan_id": plan_id, "kpis": built["kpis"], "label": built["label"], "validation": built["validation"],
+        "solver": built["solver"], "fallback": built["fallback"],
+    }
 
 
 def _store_plan(db: Db, actor: str, built: dict[str, Any], status: str, parent: str | None = None) -> str:
@@ -296,7 +299,8 @@ def _store_plan(db: Db, actor: str, built: dict[str, Any], status: str, parent: 
     db.add(PlanRow(
         id=plan_id, version_no=count, parent_id=parent, status=status,
         objective_weights=built.get("solver", {}).get("weights", {}), horizon=1440, seed=0,
-        solver_stats=built.get("solver", {}), kpis=built["kpis"], label=built.get("label", ""),
+        solver_stats={**built.get("solver", {}), **({"fallback": built["fallback"]} if "fallback" in built else {})},
+        kpis=built["kpis"], label=built.get("label", ""),
         created_by=actor, digest=digest,
     ))
     db.flush()
@@ -327,6 +331,7 @@ def _plan_brief(plan: PlanRow) -> dict[str, Any]:
         "id": plan.id, "version_no": plan.version_no, "parent_id": plan.parent_id, "status": plan.status,
         "kpis": plan.kpis, "label": plan.label, "digest": plan.digest, "created_by": plan.created_by,
         "submitted_by": plan.submitted_by, "solver": plan.solver_stats,
+        "fallback": (plan.solver_stats or {}).get("fallback"),
     }
 
 
@@ -603,7 +608,7 @@ def inject_event(body: EventBody, db: Db, user: CsrfUser) -> dict[str, Any]:
     if plan is not None:
         assignments = [row.payload for row in db.scalars(select(AssignmentRow).where(AssignmentRow.plan_id == plan.id)).all()]
     blast = impact(fused, assignments, event)
-    options = courses_of_action(fused, assignments, event, time_limit=2, seed=int(fused["seed"]))
+    options = courses_of_action(fused, assignments, event, time_limit=8, seed=int(fused["seed"]))
     for index, option in enumerate(options, start=1):
         db.add(CoaRow(
             id=f"{event_id}-{option['id']}", event_id=event_id, preset=option["id"], metrics=option["metrics"],

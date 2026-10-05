@@ -19,17 +19,30 @@ export function Gantt({ rows, epoch, onShift }: { rows: Bar[]; epoch: string; on
                 {rows.filter((row) => row.tail === tail).map((row) => {
                   const left = ((new Date(row.start).getTime() - start) / 60000 / horizon) * 100;
                   const width = ((new Date(row.end).getTime() - new Date(row.start).getTime()) / 60000 / horizon) * 100;
-                  return (
+                  const label = onShift
+                    ? `Shift ${row.mission_id} on ${row.tail} 15 minutes later`
+                    : `${row.mission_id} on ${row.tail}`;
+                  return onShift ? (
                     <button
                       type="button"
                       key={`${row.mission_id}-${row.tail}-${row.start}`}
                       className="absolute top-2 h-6 truncate rounded bg-vyom-tint px-1 text-xs leading-6 text-vyom"
                       style={{ left: `${Math.max(0, left)}%`, width: `${Math.max(2, width)}%` }}
-                      title={`${row.mission_id} ${row.load_out}`}
-                      onClick={() => onShift?.(row, 15)}
+                      title={`${row.mission_id} on ${row.tail}, load-out ${row.load_out}. Click to shift the whole mission 15 minutes later.`}
+                      aria-label={label}
+                      onClick={() => onShift(row, 15)}
                     >
                       {row.mission_id}
                     </button>
+                  ) : (
+                    <span
+                      key={`${row.mission_id}-${row.tail}-${row.start}`}
+                      className="absolute top-2 h-6 truncate rounded bg-vyom-tint px-1 text-xs leading-6 text-vyom"
+                      style={{ left: `${Math.max(0, left)}%`, width: `${Math.max(2, width)}%` }}
+                      title={label}
+                    >
+                      {row.mission_id}
+                    </span>
                   );
                 })}
               </td>
